@@ -1,6 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // ✅ Import correcto
+import 'providers/auth_provider.dart';
+import 'screens/login_screen.dart';
+import 'screens/home_screen.dart';
+import 'config/supabase_config.dart';
 
-void main() {
+void main() async {
+  // 🔧 Asegurar que los widgets estén listos
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // ✅ INICIALIZAR SUPABASE AQUÍ (ANTES de cualquier cosa)
+  await Supabase.initialize(
+    url: SupabaseConfig.url,
+    anonKey: SupabaseConfig.anonKey,
+  );
+
+  // ✅ Ahora sí, ejecutar la app
   runApp(const MyApp());
 }
 
@@ -9,46 +25,22 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'BillTracker',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E7D32)),
-        useMaterial3: true,
-      ),
-      home: const HomeScreen(),
-      debugShowCheckedModeBanner: false,
-    );
-  }
-}
-
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('BillTracker'),
-        backgroundColor: Colors.green[700],
-        foregroundColor: Colors.white,
-      ),
-      body: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.receipt_long, size: 80, color: Colors.green),
-            SizedBox(height: 20),
-            Text(
-              '¡Bienvenido a BillTracker!',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'Tu gestor de facturas inteligente',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-          ],
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()..loadUser()),
+      ],
+      child: MaterialApp(
+        title: 'BillTracker',
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E7D32)),
+          useMaterial3: true,
         ),
+        initialRoute: '/login',
+        routes: {
+          '/login': (_) => const LoginScreen(),
+          '/home': (_) => const HomeScreen(),
+        },
+        debugShowCheckedModeBanner: false,
       ),
     );
   }

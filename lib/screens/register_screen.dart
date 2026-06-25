@@ -42,10 +42,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       if (success && mounted) {
         // ✅ Navegar al Home si el registro es exitoso
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
+        Navigator.pushReplacementNamed(context, '/home');
       } else if (mounted) {
         // ❌ Mostrar error
         ScaffoldMessenger.of(context).showSnackBar(

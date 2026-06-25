@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import 'register_screen.dart';
+import 'reset_password_screen.dart';
 import 'home_screen.dart';
 
 // 🔐 Pantalla de Login
@@ -36,10 +37,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (success && mounted) {
         // ✅ Navegar al Home si el login es exitoso
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
+        Navigator.pushReplacementNamed(context, '/home');
       } else if (mounted) {
         // ❌ Mostrar error
         ScaffoldMessenger.of(context).showSnackBar(
@@ -160,6 +158,22 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+
+                  // 🔗 Link a recuperación de contraseña
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ResetPasswordScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      '¿Olvidaste tu contraseña?',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
 
                   // 📝 Link a Registro
                   Row(

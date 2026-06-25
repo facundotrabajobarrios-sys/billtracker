@@ -90,4 +90,15 @@ class AuthService {
       return null;
     }
   }
+
+  // 🔑 Recuperar contraseña
+  Future<bool> resetPassword(String email) async {
+    try {
+      await _client.auth.resetPasswordForEmail(email);
+      return true;
+    } catch (e) {
+      print('❌ Error al enviar correo de recuperación: $e');
+      return false;
+    }
+  }
 }

@@ -1,3 +1,5 @@
+import 'gamification.dart';
+
 // Modelo de Usuario para BillTracker
 class User {
   final String id;
@@ -6,6 +8,7 @@ class User {
   final int? level;
   final int? points;
   final DateTime? createdAt;
+  final Gamification? gamification;
 
   User({
     required this.id,
@@ -14,6 +17,7 @@ class User {
     this.level = 0,
     this.points = 0,
     this.createdAt,
+    this.gamification,
   });
 
   // 🔄 Crear desde JSON (viene de Supabase)
@@ -26,6 +30,9 @@ class User {
       points: json['points'] ?? 0,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
+          : null,
+      gamification: json['gamification'] != null
+          ? Gamification.fromJson(json['gamification'])
           : null,
     );
   }

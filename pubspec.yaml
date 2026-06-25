@@ -41,7 +41,7 @@ dependencies:
   #animaciones (para más adelante)
   flutter_animate: ^4.5.2
   lottie: ^3.3.3
-  # intl: ^0.19.0
+  intl: ^0.20.2
   # flutter_local_notifications: ^17.2.1+1
 
   # The following adds the Cupertino Icons font to your application.

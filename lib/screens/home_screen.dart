@@ -1,14 +1,83 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import 'bills_screen.dart';
+import '../services/notification_service.dart';
+import 'achievements_screen.dart';
+import 'profile_screen.dart';
+import 'notifications_screen.dart';
 
-// 🏠 Pantalla de inicio (dashboard)
-class HomeScreen extends StatelessWidget {
+// 🏠 Pantalla principal con navegación inferior
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _selectedIndex = 0;
+
+  static const List<Widget> _screens = [
+    _HomeContent(),
+    BillsScreen(),
+    AchievementsScreen(),
+    ProfileScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _screens[_selectedIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        currentIndex: _selectedIndex,
+        onTap: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        selectedItemColor: Colors.green[700],
+        unselectedItemColor: Colors.grey,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Inicio'),
+          BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'Facturas'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.emoji_events),
+            label: 'Logros',
+          ),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Perfil'),
+        ],
+      ),
+    );
+  }
+}
+
+// 📊 Contenido de la pantalla de inicio (Dashboard)
+class _HomeContent extends StatelessWidget {
+  const _HomeContent();
+
+  // 🔔 Stream de notificaciones no leídas
+  Stream<int> _getUnreadCountStream(BuildContext context) async* {
+    // ✅ Recibe context
+    final authProvider = context.read<AuthProvider>();
+    final userId = authProvider.user?.id;
+
+    if (userId != null) {
+      final notificationService = NotificationService();
+      while (true) {
+        final count = await notificationService.countUnread(userId);
+        yield count;
+        await Future.delayed(const Duration(seconds: 10));
+      }
+    }
+    yield 0;
+  }
 
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
+    final user = authProvider.user;
 
     return Scaffold(
       appBar: AppBar(
@@ -16,15 +85,52 @@ class HomeScreen extends StatelessWidget {
         backgroundColor: Colors.green[700],
         foregroundColor: Colors.white,
         actions: [
-          // 🚪 Botón de cerrar sesión
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await authProvider.logout();
-              // Volver al Login
-              if (context.mounted) {
-                Navigator.pushReplacementNamed(context, '/login');
-              }
+          // 🔔 Botón de notificaciones con contador
+          StreamBuilder<int>(
+            stream: _getUnreadCountStream(context), // ✅ Pasas context
+            initialData: 0,
+            builder: (context, snapshot) {
+              final count = snapshot.data ?? 0;
+              return Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NotificationsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  if (count > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 18,
+                          minHeight: 18,
+                        ),
+                        child: Text(
+                          count > 99 ? '99+' : '$count',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
             },
           ),
         ],
@@ -36,12 +142,12 @@ class HomeScreen extends StatelessWidget {
           children: [
             // 👋 Saludo
             Text(
-              '¡Hola ${authProvider.user?.name ?? 'Usuario'}! 👋',
+              '¡Hola ${user?.name ?? 'Usuario'}! 👋',
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              'Nivel: ${authProvider.user?.level ?? 0} | Puntos: ${authProvider.user?.points ?? 0}',
+              'Nivel: ${user?.level ?? 0} | Puntos: ${user?.points ?? 0}',
               style: const TextStyle(fontSize: 16, color: Colors.grey),
             ),
             const SizedBox(height: 24),
@@ -128,22 +234,6 @@ class HomeScreen extends StatelessWidget {
           ],
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Inicio'),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'Facturas'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.emoji_events),
-            label: 'Logros',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Perfil'),
-        ],
-        currentIndex: 0,
-        selectedItemColor: Colors.green[700],
-        onTap: (index) {
-          // Aquí navegaremos después
-        },
-      ),
     );
   }
 
@@ -181,4 +271,4 @@ class HomeScreen extends StatelessWidget {
       ),
     );
   }
-}
+} // aqui termina la clase _HomeContent

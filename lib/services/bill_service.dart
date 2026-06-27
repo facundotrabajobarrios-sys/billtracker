@@ -1,3 +1,4 @@
+import 'gamification_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import '../models/bill.dart';
 import '../config/supabase_config.dart';
@@ -10,12 +11,12 @@ class BillService {
   BillService._internal();
 
   // 🔗 Conexión a Supabase
-  supabase.SupabaseClient get _client => supabase.Supabase.instance.client;
+  supabase.SupabaseClient get client => supabase.Supabase.instance.client;
 
   // 📥 Obtener todas las facturas del usuario
   Future<List<Bill>> getBills(String userId) async {
     try {
-      final response = await _client
+      final response = await client
           .from('bills')
           .select('*, services(*), categories(*)')
           .eq('user_id', userId)
@@ -34,7 +35,7 @@ class BillService {
   // 📥 Obtener facturas por estado
   Future<List<Bill>> getBillsByStatus(String userId, String status) async {
     try {
-      final response = await _client
+      final response = await client
           .from('bills')
           .select('*, services(*), categories(*)')
           .eq('user_id', userId)
@@ -54,7 +55,7 @@ class BillService {
   // 📝 Crear una factura
   Future<Bill?> createBill(Bill bill) async {
     try {
-      final response = await _client
+      final response = await client
           .from('bills')
           .insert(bill.toJson())
           .select()
@@ -70,7 +71,7 @@ class BillService {
   // ✏️ Actualizar una factura
   Future<Bill?> updateBill(Bill bill) async {
     try {
-      final response = await _client
+      final response = await client
           .from('bills')
           .update(bill.toJson())
           .eq('id', bill.id)
@@ -87,7 +88,7 @@ class BillService {
   // 🗑️ Eliminar una factura
   Future<bool> deleteBill(String billId) async {
     try {
-      await _client.from('bills').delete().eq('id', billId);
+      await client.from('bills').delete().eq('id', billId);
       return true;
     } catch (e) {
       print('❌ Error al eliminar factura: $e');
@@ -98,7 +99,7 @@ class BillService {
   // ✅ Marcar factura como pagada
   Future<Bill?> markAsPaid(String billId) async {
     try {
-      final response = await _client
+      final response = await client
           .from('bills')
           .update({
             'status': 'paid',
@@ -142,7 +143,7 @@ class BillService {
   // 📥 Obtener servicios (para el selector)
   Future<List<Map<String, dynamic>>> getServices() async {
     try {
-      final response = await _client.from('services').select();
+      final response = await client.from('services').select();
       if (response != null && response is List) {
         return List<Map<String, dynamic>>.from(response);
       }
@@ -153,10 +154,30 @@ class BillService {
     }
   }
 
+  // 📝 Crear servicio (asociado al usuario)
+  Future<Map<String, dynamic>?> createService(
+    String userId,
+    String name,
+    String? description,
+  ) async {
+    try {
+      final response = await client
+          .from('services')
+          .insert({'name': name, 'description': description, 'user_id': userId})
+          .select()
+          .single();
+
+      return response;
+    } catch (e) {
+      print('❌ Error al crear servicio: $e');
+      return null;
+    }
+  }
+
   // 📥 Obtener categorías (para el selector)
   Future<List<Map<String, dynamic>>> getCategories() async {
     try {
-      final response = await _client.from('categories').select();
+      final response = await client.from('categories').select();
       if (response != null && response is List) {
         return List<Map<String, dynamic>>.from(response);
       }
@@ -164,6 +185,50 @@ class BillService {
     } catch (e) {
       print('❌ Error al obtener categorías: $e');
       return [];
+    }
+  }
+
+  // 🏆 Procesar pago con gamificación
+  Future<Bill?> markAsPaidWithGamification(String billId) async {
+    try {
+      // 1. Marcar factura como pagada
+      final bill = await markAsPaid(billId);
+      if (bill == null) return null;
+
+      // 2. Verificar si fue a tiempo
+      final wasOnTime =
+          bill.dueDate.isAfter(DateTime.now()) ||
+          bill.dueDate.isAtSameMomentAs(DateTime.now());
+
+      // 3. Procesar gamificación
+      final gamificationService = GamificationService();
+
+      // Obtener gamificación anterior (para notificaciones)
+      final oldGamification = await gamificationService.getGamification(
+        bill.userId,
+      );
+      final oldBadges = oldGamification?.unlockedBadges ?? [];
+
+      // Procesar pago
+      final updatedGamification = await gamificationService.processPayment(
+        bill.userId,
+        bill,
+        wasOnTime,
+      );
+
+      // 4. Notificar nuevas insignias
+      if (updatedGamification != null) {
+        await gamificationService.notifyNewBadges(
+          bill.userId,
+          oldBadges,
+          updatedGamification.unlockedBadges,
+        );
+      }
+
+      return bill;
+    } catch (e) {
+      print('❌ Error al marcar como pagada con gamificación: $e');
+      return null;
     }
   }
 }

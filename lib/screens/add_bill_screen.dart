@@ -20,6 +20,9 @@ class _AddBillScreenState extends State<AddBillScreen> {
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
 
+  // 🏢 Controladores para nuevo servicio
+  final _newServiceController = TextEditingController();
+
   // 📅 Variables para selecciones
   String? _selectedServiceId;
   String? _selectedCategoryId;
@@ -28,6 +31,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
   bool _isRecurring = false;
   int _reminderDays = 3;
   bool _isLoading = false;
+  bool _isAddingService = false;
 
   // 📋 Listas para los dropdowns
   List<Map<String, dynamic>> _services = [];
@@ -44,6 +48,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
   void dispose() {
     _amountController.dispose();
     _descriptionController.dispose();
+    _newServiceController.dispose();
     super.dispose();
   }
 
@@ -53,22 +58,98 @@ class _AddBillScreenState extends State<AddBillScreen> {
       _isLoadingData = true;
     });
 
-    final services = await _billService.getServices();
-    final categories = await _billService.getCategories();
+    final authProvider = context.read<AuthProvider>();
+    final userId = authProvider.user?.id;
+
+    if (userId != null) {
+      final services = await _billService.getServices();
+      final categories = await _billService.getCategories();
+
+      setState(() {
+        _services = services;
+        _categories = categories;
+        _isLoadingData = false;
+
+        if (_services.isNotEmpty) {
+          _selectedServiceId = _services[0]['id'];
+        }
+        if (_categories.isNotEmpty) {
+          _selectedCategoryId = _categories[0]['id'];
+        }
+      });
+    } else {
+      setState(() {
+        _isLoadingData = false;
+      });
+    }
+  }
+
+  // 🏢 Agregar nuevo servicio
+  Future<void> _addNewService() async {
+    final name = _newServiceController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Ingresa el nombre del servicio'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
 
     setState(() {
-      _services = services;
-      _categories = categories;
-      _isLoadingData = false;
-
-      // Seleccionar el primero por defecto
-      if (_services.isNotEmpty) {
-        _selectedServiceId = _services[0]['id'];
-      }
-      if (_categories.isNotEmpty) {
-        _selectedCategoryId = _categories[0]['id'];
-      }
+      _isAddingService = true;
     });
+
+    final authProvider = context.read<AuthProvider>();
+    final userId = authProvider.user?.id;
+
+    if (userId == null) {
+      setState(() {
+        _isAddingService = false;
+      });
+      return;
+    }
+
+    try {
+      final newService = await _billService.createService(
+        userId,
+        name,
+        null, // Sin descripción por ahora
+      );
+
+      setState(() {
+        _isAddingService = false;
+        _newServiceController.clear();
+      });
+
+      if (newService != null && mounted) {
+        // ✅ Recargar servicios y seleccionar el nuevo
+        await _loadData();
+
+        // Seleccionar el servicio recién creado
+        setState(() {
+          _selectedServiceId = newService['id'];
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Servicio "$name" creado exitosamente'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isAddingService = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Error al crear el servicio'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   // 📝 Guardar factura
@@ -97,10 +178,9 @@ class _AddBillScreenState extends State<AddBillScreen> {
         });
         return;
       }
-
-      // 🔄 Crear objeto Bill
+      // Crear objeto Bill y enviarlo al servicio
       final bill = Bill(
-        id: '', // Supabase genera el ID
+        id: '',
         userId: userId,
         serviceId: _selectedServiceId!,
         categoryId: _selectedCategoryId!,
@@ -121,14 +201,16 @@ class _AddBillScreenState extends State<AddBillScreen> {
       });
 
       if (createdBill != null && mounted) {
-        // ✅ Éxito
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('✅ Factura creada exitosamente'),
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(context, true); // Volver con resultado exitoso
+        Navigator.pop(
+          context,
+          true,
+        ); // Regresar a la pantalla anterior indicando que se creó una factura
       } else if (mounted) {
         _showError('Error al crear la factura');
       }
@@ -166,6 +248,11 @@ class _AddBillScreenState extends State<AddBillScreen> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
+            tooltip: 'Recargar',
+          ),
+          IconButton(
             icon: const Icon(Icons.save),
             onPressed: _isLoading ? null : _saveBill,
           ),
@@ -180,31 +267,59 @@ class _AddBillScreenState extends State<AddBillScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 🏢 Servicio
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(
-                        labelText: 'Servicio *',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.business),
-                      ),
-                      value: _selectedServiceId,
-                      items: _services.map((service) {
-                        return DropdownMenuItem<String>(
-                          value: service['id'],
-                          child: Text(service['name']),
-                        ); // Mostrar nombre del servicio
-                      }).toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedServiceId = value;
-                        });
-                      },
-                      validator: (value) {
-                        if (value == null) {
-                          return 'Selecciona un servicio';
-                        }
-                        return null;
-                      },
+                    // 🏢 Servicio (con opción de agregar nuevo)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: DropdownButtonFormField<String>(
+                            decoration: const InputDecoration(
+                              labelText: 'Servicio *',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.business),
+                            ),
+                            value: _selectedServiceId,
+                            items: _services.map((service) {
+                              return DropdownMenuItem<String>(
+                                value: service['id'],
+                                child: Text(service['name']),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                _selectedServiceId = value;
+                              });
+                            },
+                            validator: (value) {
+                              if (value == null) {
+                                return 'Selecciona un servicio';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // ➕ Botón para agregar nuevo servicio
+                        Expanded(
+                          flex: 1,
+                          child: Tooltip(
+                            message: 'Agregar nuevo servicio',
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.add_circle,
+                                color: Colors.green,
+                                size: 40,
+                              ),
+                              onPressed: _isAddingService
+                                  ? null
+                                  : () {
+                                      _showAddServiceDialog();
+                                    },
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
 
@@ -411,6 +526,71 @@ class _AddBillScreenState extends State<AddBillScreen> {
                 ),
               ),
             ),
+    );
+  }
+
+  // 🏢 Dialog para agregar nuevo servicio
+  void _showAddServiceDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.business, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Nuevo Servicio'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Ingresa el nombre del nuevo servicio',
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _newServiceController,
+              decoration: const InputDecoration(
+                hintText: 'Ej: Starlink, Disney+, ...',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.business),
+              ),
+              autofocus: true,
+              onFieldSubmitted: (_) => _addNewService(),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: _isAddingService
+                ? null
+                : () {
+                    _newServiceController.clear();
+                    Navigator.pop(context);
+                  },
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: _isAddingService ? null : _addNewService,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green[700],
+              foregroundColor: Colors.white,
+            ),
+            child: _isAddingService
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('Agregar'),
+          ),
+        ],
+      ),
     );
   }
 }

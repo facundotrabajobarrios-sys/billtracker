@@ -82,17 +82,26 @@ class _BillsScreenState extends State<BillsScreen> {
     }
   }
 
-  // ✅ Marcar como pagada
+  // ✅ Marcar como pagada (con gamificación)
   Future<void> _markAsPaid(Bill bill) async {
-    final updated = await _billService.markAsPaid(bill.id);
+    final updated = await _billService.markAsPaidWithGamification(bill.id);
+
     if (updated != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('✅ Factura marcada como pagada'),
+          content: Text('✅ Factura marcada como pagada. ¡+10 puntos!'),
           backgroundColor: Colors.green,
+          duration: Duration(seconds: 3),
         ),
       );
       _loadBills();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Error al marcar como pagada'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -110,8 +119,11 @@ class _BillsScreenState extends State<BillsScreen> {
         backgroundColor: Colors.green[700],
         foregroundColor: Colors.white,
         actions: [
-          // 🔄 Botón de recargar
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadBills),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadBills,
+            tooltip: 'Recargar',
+          ),
         ],
       ),
       body: Column(
@@ -158,7 +170,7 @@ class _BillsScreenState extends State<BillsScreen> {
             MaterialPageRoute(builder: (_) => const AddBillScreen()),
           );
           if (result == true) {
-            _loadBills(); // Recargar si se agregó una factura
+            _loadBills();
           }
         },
         backgroundColor: Colors.green[700],
@@ -234,44 +246,44 @@ class _BillsScreenState extends State<BillsScreen> {
               ),
           ],
         ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              bill.formattedAmount,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: bill.statusColor.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(8),
+        trailing: bill.status != 'paid'
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 🔘 Botón de pagar
+                  IconButton(
+                    icon: const Icon(Icons.check_circle, color: Colors.green),
+                    onPressed: () => _markAsPaid(bill),
+                    tooltip: 'Marcar como pagada',
+                  ),
+                  // 🗑️ Botón de eliminar
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () => _deleteBill(bill),
+                    tooltip: 'Eliminar',
+                  ),
+                ],
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 🗑️ Botón de eliminar (solo para pagadas)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () => _deleteBill(bill),
+                    tooltip: 'Eliminar',
+                  ),
+                ],
               ),
-              child: Text(
-                bill.statusText,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: bill.statusColor,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
         isThreeLine: true,
         onTap: () {
           // TODO: Editar factura
-        },
-        onLongPress: () {
-          // Menú de acciones al presionar largo
-          _showActionMenu(bill);
         },
       ),
     );
   }
 
-  // 📋 Menú de acciones
+  // 📋 Menú de acciones (presión larga)
   void _showActionMenu(Bill bill) {
     showModalBottomSheet(
       context: context,

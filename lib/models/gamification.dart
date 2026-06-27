@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 // 🏆 Modelo de Gamificación
 class Gamification {
   final String id;
@@ -51,10 +53,11 @@ class Gamification {
     );
   }
 
-  // 📤 Convertir a JSON
+  // 📤 Convertir a JSON ← 🔧 CORREGIDO
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
+      // ✅ SOLO enviar ID si NO está vacío
+      if (id.isNotEmpty) 'id': id,
       'user_id': userId,
       'total_points': totalPoints,
       'current_level': currentLevel,
@@ -68,8 +71,22 @@ class Gamification {
     };
   }
 
+  // 📋 Crear gamificación inicial para nuevo usuario
+  static Gamification createInitial(String userId) {
+    return Gamification(
+      id: '',
+      userId: userId,
+      totalPoints: 0,
+      currentLevel: 1,
+      streakDays: 0,
+      totalPaidBills: 0,
+      onTimePayments: 0,
+      unlockedBadges: [],
+    );
+  }
+
   // 🏆 Calcular nivel basado en puntos
-  int calculateLevel(int points) {
+  static int calculateLevel(int points) {
     if (points < 100) return 1;
     if (points < 300) return 2;
     if (points < 600) return 3;
@@ -80,64 +97,19 @@ class Gamification {
     return 8;
   }
 
-  // 🏅 Insignias disponibles
-  static List<Badge> getAvailableBadges() {
-    return [
-      Badge(
-        id: 'first_payment',
-        name: 'Primer Pago',
-        description: '¡Pagaste tu primera factura!',
-        icon: '🎉',
-        requirement: 'Pagar 1 factura',
-      ),
-      Badge(
-        id: 'on_time_3',
-        name: 'Puntual',
-        description: '3 pagos a tiempo consecutivos',
-        icon: '⏰',
-        requirement: '3 pagos a tiempo seguidos',
-      ),
-      Badge(
-        id: 'on_time_7',
-        name: 'Súper Puntual',
-        description: '7 pagos a tiempo consecutivos',
-        icon: '⭐',
-        requirement: '7 pagos a tiempo seguidos',
-      ),
-      Badge(
-        id: 'on_time_30',
-        name: 'Leyenda',
-        description: '30 pagos a tiempo consecutivos',
-        icon: '👑',
-        requirement: '30 pagos a tiempo seguidos',
-      ),
-      Badge(
-        id: 'paid_10',
-        name: 'Experto en Pagos',
-        description: '10 facturas pagadas',
-        icon: '💰',
-        requirement: 'Pagar 10 facturas',
-      ),
-      Badge(
-        id: 'paid_50',
-        name: 'Maestro Financiero',
-        description: '50 facturas pagadas',
-        icon: '💎',
-        requirement: 'Pagar 50 facturas',
-      ),
-      Badge(
-        id: 'no_overdue_30',
-        name: 'Sin Retrasos',
-        description: '30 días sin facturas vencidas',
-        icon: '🏆',
-        requirement: '30 días sin vencimientos',
-      ),
-    ];
-  }
-
-  // 🎯 Verificar si una insignia está desbloqueada
-  bool hasBadge(String badgeId) {
-    return unlockedBadges.contains(badgeId);
+  // 🏅 Obtener nombre del nivel
+  static String getLevelName(int level) {
+    const levels = {
+      1: '🌱 Novato',
+      2: '📊 Aprendiz',
+      3: '💪 Esforzado',
+      4: '🎯 Organizado',
+      5: '⭐ Confiable',
+      6: '🏅 Experto',
+      7: '💎 Maestro',
+      8: '👑 Leyenda',
+    };
+    return levels[level] ?? '🌱 Novato';
   }
 
   // 📊 Progreso al siguiente nivel
@@ -148,39 +120,168 @@ class Gamification {
   }
 
   int _pointsForLevel(int level) {
-    // Fórmula: nivel 1 = 0pts, nivel 2 = 100pts, nivel 3 = 300pts, etc.
     if (level <= 1) return 0;
-    return level * level * 25; // 1:25, 2:100, 3:225, 4:400...
+    return (level - 1) * 100 + ((level - 1) * (level - 2) * 50) ~/ 2;
+  }
+
+  // 📊 Porcentaje de progreso al siguiente nivel
+  double get progressToNextLevel {
+    final currentLevelPoints = _pointsForLevel(currentLevel);
+    final nextLevelPoints = _pointsForLevel(currentLevel + 1);
+    if (nextLevelPoints == currentLevelPoints) return 1.0;
+    return (totalPoints - currentLevelPoints) /
+        (nextLevelPoints - currentLevelPoints);
+  }
+
+  // 🏅 Insignias disponibles
+  static List<AchievementBadge> getAvailableBadges() {
+    return [
+      AchievementBadge(
+        id: 'first_payment',
+        name: 'Primer Pago',
+        description: '¡Pagaste tu primera factura!',
+        icon: '🎉',
+        requirement: 'Pagar 1 factura',
+        color: '#FF6B6B',
+      ),
+      AchievementBadge(
+        id: 'on_time_3',
+        name: 'Puntual',
+        description: '3 pagos a tiempo consecutivos',
+        icon: '⏰',
+        requirement: '3 pagos a tiempo seguidos',
+        color: '#4ECDC4',
+      ),
+      AchievementBadge(
+        id: 'on_time_7',
+        name: 'Súper Puntual',
+        description: '7 pagos a tiempo consecutivos',
+        icon: '⭐',
+        requirement: '7 pagos a tiempo seguidos',
+        color: '#45B7D1',
+      ),
+      AchievementBadge(
+        id: 'on_time_30',
+        name: 'Leyenda de la Puntualidad',
+        description: '30 pagos a tiempo consecutivos',
+        icon: '👑',
+        requirement: '30 pagos a tiempo seguidos',
+        color: '#FFD700',
+      ),
+      AchievementBadge(
+        id: 'paid_10',
+        name: 'Experto en Pagos',
+        description: '10 facturas pagadas',
+        icon: '💰',
+        requirement: 'Pagar 10 facturas',
+        color: '#96CEB4',
+      ),
+      AchievementBadge(
+        id: 'paid_50',
+        name: 'Maestro Financiero',
+        description: '50 facturas pagadas',
+        icon: '💎',
+        requirement: 'Pagar 50 facturas',
+        color: '#DDA0DD',
+      ),
+      AchievementBadge(
+        id: 'no_overdue_30',
+        name: 'Sin Retrasos',
+        description: '30 días sin facturas vencidas',
+        icon: '🏆',
+        requirement: '30 días sin vencimientos',
+        color: '#FFD700',
+      ),
+    ];
+  }
+
+  // 🎯 Verificar si una insignia está desbloqueada
+  bool hasBadge(String badgeId) {
+    return unlockedBadges.contains(badgeId);
+  }
+
+  // 🎯 Obtener insignias desbloqueadas
+  List<AchievementBadge> getUnlockedBadges() {
+    final allBadges = Gamification.getAvailableBadges();
+    return allBadges.where((b) => unlockedBadges.contains(b.id)).toList();
+  }
+
+  // 🎯 Obtener insignias bloqueadas
+  List<AchievementBadge> getLockedBadges() {
+    final allBadges = Gamification.getAvailableBadges();
+    return allBadges.where((b) => !unlockedBadges.contains(b.id)).toList();
+  }
+
+  // 📋 Copia con cambios (para actualizar)
+  Gamification copyWith({
+    String? id,
+    String? userId,
+    int? totalPoints,
+    int? currentLevel,
+    int? streakDays,
+    int? totalPaidBills,
+    int? onTimePayments,
+    List<String>? unlockedBadges,
+    DateTime? lastPaymentDate,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return Gamification(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      totalPoints: totalPoints ?? this.totalPoints,
+      currentLevel: currentLevel ?? this.currentLevel,
+      streakDays: streakDays ?? this.streakDays,
+      totalPaidBills: totalPaidBills ?? this.totalPaidBills,
+      onTimePayments: onTimePayments ?? this.onTimePayments,
+      unlockedBadges: unlockedBadges ?? this.unlockedBadges,
+      lastPaymentDate: lastPaymentDate ?? this.lastPaymentDate,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
   }
 }
 
 // 🏅 Modelo de Insignia
-class Badge {
+class AchievementBadge {
   final String id;
   final String name;
   final String description;
   final String icon;
   final String requirement;
+  final String color;
   final bool isUnlocked;
 
-  Badge({
+  AchievementBadge({
     required this.id,
     required this.name,
     required this.description,
     required this.icon,
     required this.requirement,
+    this.color = '#4CAF50',
     this.isUnlocked = false,
   });
 
   // Crear copia con estado desbloqueado
-  Badge copyWith({bool? isUnlocked}) {
-    return Badge(
+  AchievementBadge copyWith({bool? isUnlocked}) {
+    return AchievementBadge(
       id: id,
       name: name,
       description: description,
       icon: icon,
       requirement: requirement,
+      color: color,
       isUnlocked: isUnlocked ?? this.isUnlocked,
     );
+  }
+
+  // Color como Color de Flutter
+  Color get colorValue {
+    try {
+      final hex = color.replaceFirst('#', '');
+      return Color(int.parse('FF$hex', radix: 16));
+    } catch (e) {
+      return Colors.green;
+    }
   }
 }

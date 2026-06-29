@@ -25,20 +25,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   // 📥 Cargar notificaciones
   Future<void> _loadNotifications() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
-    final authProvider = context.read<AuthProvider>();
-    final userId = authProvider.user?.id;
-
+    final userId = context.read<AuthProvider>().user?.id;
     if (userId != null) {
       _notifications = await _notificationService.getNotifications(userId);
     }
 
-    setState(() {
-      _isLoading = false;
-    });
+    setState(() => _isLoading = false);
   }
 
   // ✅ Marcar como leída
@@ -49,9 +43,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   // ✅ Marcar todas como leídas
   Future<void> _markAllAsRead() async {
-    final authProvider = context.read<AuthProvider>();
-    final userId = authProvider.user?.id;
-
+    final userId = context.read<AuthProvider>().user?.id;
     if (userId != null) {
       await _notificationService.markAllAsRead(userId);
       _loadNotifications();
@@ -113,72 +105,79 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _notifications.isEmpty
-          ? _buildEmptyState()
-          : ListView.builder(
-              padding: const EdgeInsets.all(8),
-              itemCount: _notifications.length,
-              itemBuilder: (context, index) {
-                final notification = _notifications[index];
-                return Card(
-                  elevation: notification.isRead ? 0 : 2,
-                  color: notification.isRead ? Colors.grey[50] : Colors.white,
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: _getTypeColor(
-                        notification.type,
-                      ).withOpacity(0.2),
-                      child: Icon(
-                        _getTypeIcon(notification.type),
-                        color: _getTypeColor(notification.type),
-                      ),
-                    ),
-                    title: Text(
-                      notification.title,
-                      style: TextStyle(
-                        fontWeight: notification.isRead
-                            ? FontWeight.normal
-                            : FontWeight.bold,
-                      ),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(notification.message),
-                        const SizedBox(height: 4),
-                        Text(
-                          _formatDate(notification.createdAt),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                          ),
+      body: RefreshIndicator(
+        // ✅ PULL-TO-REFRESH
+        onRefresh: _loadNotifications,
+        color: Colors.green,
+        backgroundColor: Colors.white,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _notifications.isEmpty
+            ? _buildEmptyState()
+            : ListView.builder(
+                padding: const EdgeInsets.all(8),
+                itemCount: _notifications.length,
+                itemBuilder: (context, index) {
+                  final notification = _notifications[index];
+                  return Card(
+                    elevation: notification.isRead ? 0 : 2,
+                    color: notification.isRead ? Colors.grey[50] : Colors.white,
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: _getTypeColor(
+                          notification.type,
+                        ).withOpacity(0.2),
+                        child: Icon(
+                          _getTypeIcon(notification.type),
+                          color: _getTypeColor(notification.type),
                         ),
-                      ],
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (!notification.isRead)
+                      ),
+                      title: Text(
+                        notification.title,
+                        style: TextStyle(
+                          fontWeight: notification.isRead
+                              ? FontWeight.normal
+                              : FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(notification.message),
+                          const SizedBox(height: 4),
+                          Text(
+                            _formatDate(notification.createdAt),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (!notification.isRead)
+                            IconButton(
+                              icon: const Icon(Icons.mark_as_unread, size: 20),
+                              onPressed: () => _markAsRead(notification.id),
+                              tooltip: 'Marcar como leída',
+                            ),
                           IconButton(
-                            icon: const Icon(Icons.mark_as_unread, size: 20),
-                            onPressed: () => _markAsRead(notification.id),
-                            tooltip: 'Marcar como leída',
+                            icon: const Icon(Icons.delete_outline, size: 20),
+                            onPressed: () =>
+                                _deleteNotification(notification.id),
+                            tooltip: 'Eliminar',
                           ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 20),
-                          onPressed: () => _deleteNotification(notification.id),
-                          tooltip: 'Eliminar',
-                        ),
-                      ],
+                        ],
+                      ),
+                      onTap: () => _markAsRead(notification.id),
                     ),
-                    onTap: () => _markAsRead(notification.id),
-                  ),
-                );
-              },
-            ),
+                  );
+                },
+              ),
+      ),
     );
   }
 

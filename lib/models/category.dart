@@ -17,8 +17,9 @@ class Category {
   // 📥 Crear desde JSON
   factory Category.fromJson(Map<String, dynamic> json) {
     return Category(
-      id: json['id'] ?? '',
-      name: json['name'] ?? '',
+      id: json['id'] ?? '', // ✅ Si es null, usa ''
+      name:
+          json['name'] ?? 'Sin categoría', // ✅ Si es null, usa 'Sin categoría'
       icon: json['icon'],
       color: json['color'],
       createdAt: json['created_at'] != null

@@ -41,39 +41,52 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
         backgroundColor: Colors.green[700],
         foregroundColor: Colors.white,
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
+            tooltip: 'Recargar',
+          ),
         ],
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : gamification == null
-          ? _buildEmptyState()
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 🏆 Resumen
-                  _buildSummaryCard(gamification),
-                  const SizedBox(height: 24),
+      body: RefreshIndicator(
+        // ✅ PULL-TO-REFRESH
+        onRefresh: _loadData,
+        color: Colors.green,
+        backgroundColor: Colors.white,
+        child: isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : gamification == null
+            ? _buildEmptyState()
+            : SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 🏆 Resumen
+                    _buildSummaryCard(gamification),
+                    const SizedBox(height: 24),
 
-                  // 📊 Barra de progreso al siguiente nivel
-                  _buildProgressBar(gamification),
-                  const SizedBox(height: 24),
+                    // 📊 Barra de progreso
+                    _buildProgressBar(gamification),
+                    const SizedBox(height: 24),
 
-                  // 🏅 Insignias
-                  const Text(
-                    '🏅 Insignias',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildBadgesGrid(
-                    gamificationProvider
-                        .getBadgesWithStatus(), // ✅ Usa AchievementBadge
-                  ),
-                ],
+                    // 🏅 Insignias
+                    const Text(
+                      '🏅 Insignias',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildBadgesGrid(
+                      gamificationProvider.getBadgesWithStatus(),
+                    ),
+                  ],
+                ),
               ),
-            ),
+      ),
     );
   }
 
@@ -214,7 +227,6 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
 
   // 🏅 Grid de insignias
   Widget _buildBadgesGrid(List<AchievementBadge> badges) {
-    // ✅ AchievementBadge
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -234,7 +246,6 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
 
   // 🏅 Tarjeta de insignia
   Widget _buildBadgeCard(AchievementBadge badge) {
-    // ✅ AchievementBadge
     return Card(
       elevation: badge.isUnlocked ? 2 : 0,
       color: badge.isUnlocked ? Colors.white : Colors.grey[100],
@@ -250,14 +261,11 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Icono
               Text(
                 badge.isUnlocked ? badge.icon : '🔒',
                 style: const TextStyle(fontSize: 32),
               ),
               const SizedBox(height: 8),
-
-              // Nombre
               Text(
                 badge.isUnlocked ? badge.name : '???',
                 style: TextStyle(
@@ -270,8 +278,6 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
-
-              // Estado
               Text(
                 badge.isUnlocked ? '✅ Desbloqueado' : '🔒 Bloqueado',
                 style: TextStyle(

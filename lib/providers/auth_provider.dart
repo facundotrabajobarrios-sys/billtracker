@@ -29,6 +29,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     } catch (e) {
+      print('❌ Error en login: $e');
       _isLoading = false;
       notifyListeners();
       return false;
@@ -52,6 +53,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     } catch (e) {
+      print('❌ Error en registro: $e');
       _isLoading = false;
       notifyListeners();
       return false;
@@ -65,10 +67,29 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 🔄 Cargar usuario actual
+  // 🔄 Cargar usuario actual (desde caché o Supabase)
   Future<void> loadUser() async {
-    final user = await _authService.getCurrentUser();
-    _user = user;
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final user = await _authService.getCurrentUser();
+      _user = user;
+      if (user != null) {
+        print('👤 Usuario cargado: ${user.email}');
+      } else {
+        print('👤 No hay usuario logueado');
+        _user = null;
+      }
+    } catch (e) {
+      print('❌ Error al cargar usuario: $e');
+      _user = null;
+    }
+
+    _isLoading = false;
     notifyListeners();
   }
+
+  // ✅ Verificar si el usuario está autenticado y cargado
+  bool get hasValidSession => _user != null;
 }

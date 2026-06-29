@@ -42,6 +42,7 @@ dependencies:
   flutter_animate: ^4.5.2
   lottie: ^3.3.3
   intl: ^0.20.2
+  shared_preferences: ^2.5.5 #esto es para guardar datos en el dispositivo del usuario
   # flutter_local_notifications: ^17.2.1+1
 
   # The following adds the Cupertino Icons font to your application.

@@ -16,14 +16,33 @@ class BillService {
   // 📥 Obtener todas las facturas del usuario
   Future<List<Bill>> getBills(String userId) async {
     try {
+      // ✅ CAMBIAR `!inner` por `()`
       final response = await client
           .from('bills')
-          .select('*, services(*), categories(*)')
+          .select('''
+            *,
+            services (
+              id,
+              name,
+              description
+            ),
+            categories (
+              id,
+              name,
+              icon,
+              color
+            )
+          ''')
           .eq('user_id', userId)
           .order('due_date', ascending: true);
 
+      print('📊 Facturas obtenidas: ${response is List ? response.length : 0}');
+
       if (response != null && response is List) {
-        return response.map((json) => Bill.fromJson(json)).toList();
+        return response.map((json) {
+          print('📄 Factura: ${json['id']} - Servicio: ${json['services']}');
+          return Bill.fromJson(json);
+        }).toList();
       }
       return [];
     } catch (e) {
@@ -37,7 +56,20 @@ class BillService {
     try {
       final response = await client
           .from('bills')
-          .select('*, services(*), categories(*)')
+          .select('''
+            *,
+            services (
+              id,
+              name,
+              description
+            ),
+            categories (
+              id,
+              name,
+              icon,
+              color
+            )
+          ''')
           .eq('user_id', userId)
           .eq('status', status)
           .order('due_date', ascending: true);
@@ -55,11 +87,22 @@ class BillService {
   // 📝 Crear una factura
   Future<Bill?> createBill(Bill bill) async {
     try {
-      final response = await client
-          .from('bills')
-          .insert(bill.toJson())
-          .select()
-          .single();
+      final response = await client.from('bills').insert(bill.toJson()).select(
+        '''
+            *,
+            services (
+              id,
+              name,
+              description
+            ),
+            categories (
+              id,
+              name,
+              icon,
+              color
+            )
+          ''',
+      ).single();
 
       return Bill.fromJson(response);
     } catch (e) {
@@ -75,7 +118,20 @@ class BillService {
           .from('bills')
           .update(bill.toJson())
           .eq('id', bill.id)
-          .select()
+          .select('''
+            *,
+            services (
+              id,
+              name,
+              description
+            ),
+            categories (
+              id,
+              name,
+              icon,
+              color
+            )
+          ''')
           .single();
 
       return Bill.fromJson(response);
@@ -106,7 +162,20 @@ class BillService {
             'paid_date': DateTime.now().toIso8601String(),
           })
           .eq('id', billId)
-          .select()
+          .select('''
+            *,
+            services (
+              id,
+              name,
+              description
+            ),
+            categories (
+              id,
+              name,
+              icon,
+              color
+            )
+          ''')
           .single();
 
       return Bill.fromJson(response);

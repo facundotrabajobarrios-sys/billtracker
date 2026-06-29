@@ -17,7 +17,7 @@ class _BillsScreenState extends State<BillsScreen> {
   final _billService = BillService();
   List<Bill> _bills = [];
   bool _isLoading = true;
-  String _filterStatus = 'all'; // 'all', 'pending', 'paid', 'overdue'
+  String _filterStatus = 'all';
 
   @override
   void initState() {
@@ -27,24 +27,14 @@ class _BillsScreenState extends State<BillsScreen> {
 
   // 📥 Cargar facturas
   Future<void> _loadBills() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
-    final authProvider = context.read<AuthProvider>();
-    final userId = authProvider.user?.id;
-
+    final userId = context.read<AuthProvider>().user?.id;
     if (userId != null) {
-      final bills = await _billService.getBills(userId);
-      setState(() {
-        _bills = bills;
-        _isLoading = false;
-      });
-    } else {
-      setState(() {
-        _isLoading = false;
-      });
+      _bills = await _billService.getBills(userId);
     }
+
+    setState(() => _isLoading = false);
   }
 
   // 🗑️ Eliminar factura
@@ -119,6 +109,7 @@ class _BillsScreenState extends State<BillsScreen> {
         backgroundColor: Colors.green[700],
         foregroundColor: Colors.white,
         actions: [
+          // 🔄 Botón de recargar (sigue disponible)
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadBills,
@@ -126,42 +117,48 @@ class _BillsScreenState extends State<BillsScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // 🔍 Filtros
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _buildFilterChip('Todas', 'all'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('Pendientes', 'pending'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('Pagadas', 'paid'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('Vencidas', 'overdue'),
-                ],
+      body: RefreshIndicator(
+        // ✅ PULL-TO-REFRESH
+        onRefresh: _loadBills,
+        color: Colors.green,
+        backgroundColor: Colors.white,
+        child: Column(
+          children: [
+            // 🔍 Filtros
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildFilterChip('Todas', 'all'),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Pendientes', 'pending'),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Pagadas', 'paid'),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Vencidas', 'overdue'),
+                  ],
+                ),
               ),
             ),
-          ),
-          // 📄 Lista de facturas
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _filteredBills.isEmpty
-                ? _buildEmptyState()
-                : ListView.builder(
-                    padding: const EdgeInsets.all(8),
-                    itemCount: _filteredBills.length,
-                    itemBuilder: (context, index) {
-                      final bill = _filteredBills[index];
-                      return _buildBillCard(bill);
-                    },
-                  ),
-          ),
-        ],
+            // 📄 Lista de facturas
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _filteredBills.isEmpty
+                  ? _buildEmptyState()
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(8),
+                      itemCount: _filteredBills.length,
+                      itemBuilder: (context, index) {
+                        final bill = _filteredBills[index];
+                        return _buildBillCard(bill);
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
@@ -169,9 +166,7 @@ class _BillsScreenState extends State<BillsScreen> {
             context,
             MaterialPageRoute(builder: (_) => const AddBillScreen()),
           );
-          if (result == true) {
-            _loadBills();
-          }
+          if (result == true) _loadBills();
         },
         backgroundColor: Colors.green[700],
         child: const Icon(Icons.add, color: Colors.white),
@@ -185,11 +180,7 @@ class _BillsScreenState extends State<BillsScreen> {
     return FilterChip(
       label: Text(label),
       selected: isSelected,
-      onSelected: (selected) {
-        setState(() {
-          _filterStatus = value;
-        });
-      },
+      onSelected: (selected) => setState(() => _filterStatus = value),
       selectedColor: Colors.green[100],
       checkmarkColor: Colors.green[700],
       backgroundColor: Colors.grey[200],
@@ -250,13 +241,11 @@ class _BillsScreenState extends State<BillsScreen> {
             ? Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 🔘 Botón de pagar
                   IconButton(
                     icon: const Icon(Icons.check_circle, color: Colors.green),
                     onPressed: () => _markAsPaid(bill),
                     tooltip: 'Marcar como pagada',
                   ),
-                  // 🗑️ Botón de eliminar
                   IconButton(
                     icon: const Icon(Icons.delete_outline, color: Colors.red),
                     onPressed: () => _deleteBill(bill),
@@ -267,7 +256,6 @@ class _BillsScreenState extends State<BillsScreen> {
             : Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 🗑️ Botón de eliminar (solo para pagadas)
                   IconButton(
                     icon: const Icon(Icons.delete_outline, color: Colors.red),
                     onPressed: () => _deleteBill(bill),
@@ -276,48 +264,13 @@ class _BillsScreenState extends State<BillsScreen> {
                 ],
               ),
         isThreeLine: true,
-        onTap: () {
-          // TODO: Editar factura
+        onTap: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => AddBillScreen(bill: bill)),
+          );
+          if (result == true) _loadBills();
         },
-      ),
-    );
-  }
-
-  // 📋 Menú de acciones (presión larga)
-  void _showActionMenu(Bill bill) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (bill.status != 'paid')
-              ListTile(
-                leading: const Icon(Icons.check_circle, color: Colors.green),
-                title: const Text('Marcar como pagada'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _markAsPaid(bill);
-                },
-              ),
-            ListTile(
-              leading: const Icon(Icons.edit, color: Colors.blue),
-              title: const Text('Editar'),
-              onTap: () {
-                Navigator.pop(context);
-                // TODO: Editar factura
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete, color: Colors.red),
-              title: const Text('Eliminar'),
-              onTap: () {
-                Navigator.pop(context);
-                _deleteBill(bill);
-              },
-            ),
-          ],
-        ),
       ),
     );
   }

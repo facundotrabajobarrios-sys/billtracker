@@ -4,9 +4,11 @@ import '../providers/auth_provider.dart';
 import '../services/bill_service.dart';
 import '../models/bill.dart';
 
-// 📄 Pantalla para agregar factura
+// 📄 Pantalla para agregar/editar factura
 class AddBillScreen extends StatefulWidget {
-  const AddBillScreen({super.key});
+  final Bill? bill; // ✅ Si viene con datos, es edición
+
+  const AddBillScreen({super.key, this.bill});
 
   @override
   State<AddBillScreen> createState() => _AddBillScreenState();
@@ -16,14 +18,12 @@ class _AddBillScreenState extends State<AddBillScreen> {
   final _formKey = GlobalKey<FormState>();
   final _billService = BillService();
 
-  // 🔤 Controladores de texto
+  // 🔤 Controladores
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
-
-  // 🏢 Controladores para nuevo servicio
+  // 🏢 Controlador para nuevo servicio
   final _newServiceController = TextEditingController();
-
-  // 📅 Variables para selecciones
+  // 📅 Variables
   String? _selectedServiceId;
   String? _selectedCategoryId;
   DateTime _selectedDate = DateTime.now();
@@ -32,8 +32,9 @@ class _AddBillScreenState extends State<AddBillScreen> {
   int _reminderDays = 3;
   bool _isLoading = false;
   bool _isAddingService = false;
+  bool _isEditing = false; // ✅ Bandera para saber si es edición
 
-  // 📋 Listas para los dropdowns
+  // 📋 Listas
   List<Map<String, dynamic>> _services = [];
   List<Map<String, dynamic>> _categories = [];
   bool _isLoadingData = true;
@@ -41,6 +42,10 @@ class _AddBillScreenState extends State<AddBillScreen> {
   @override
   void initState() {
     super.initState();
+    _isEditing = widget.bill != null;
+    if (_isEditing) {
+      _loadBillData(); // ✅ Cargar datos de la factura a editar
+    }
     _loadData();
   }
 
@@ -52,11 +57,24 @@ class _AddBillScreenState extends State<AddBillScreen> {
     super.dispose();
   }
 
+  // 📥 Cargar datos de la factura a editar
+  void _loadBillData() {
+    final bill = widget.bill!;
+    _selectedServiceId = bill.serviceId;
+    _selectedCategoryId = bill.categoryId;
+    _amountController.text = bill.amount.toString();
+    _selectedDate = bill.dueDate;
+    _selectedStatus = bill.status;
+    _isRecurring = bill.isRecurring;
+    _reminderDays = bill.reminderDays ?? 3;
+    if (bill.description != null) {
+      _descriptionController.text = bill.description!;
+    }
+  }
+
   // 📥 Cargar servicios y categorías
   Future<void> _loadData() async {
-    setState(() {
-      _isLoadingData = true;
-    });
+    setState(() => _isLoadingData = true);
 
     final authProvider = context.read<AuthProvider>();
     final userId = authProvider.user?.id;
@@ -70,17 +88,18 @@ class _AddBillScreenState extends State<AddBillScreen> {
         _categories = categories;
         _isLoadingData = false;
 
-        if (_services.isNotEmpty) {
-          _selectedServiceId = _services[0]['id'];
-        }
-        if (_categories.isNotEmpty) {
-          _selectedCategoryId = _categories[0]['id'];
+        // ✅ Si es edición, mantener el servicio/categoría seleccionado
+        if (!_isEditing) {
+          if (_services.isNotEmpty) {
+            _selectedServiceId = _services[0]['id'];
+          }
+          if (_categories.isNotEmpty) {
+            _selectedCategoryId = _categories[0]['id'];
+          }
         }
       });
     } else {
-      setState(() {
-        _isLoadingData = false;
-      });
+      setState(() => _isLoadingData = false);
     }
   }
 
@@ -88,170 +107,123 @@ class _AddBillScreenState extends State<AddBillScreen> {
   Future<void> _addNewService() async {
     final name = _newServiceController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('❌ Ingresa el nombre del servicio'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      _showError('Ingresa el nombre del servicio');
       return;
     }
 
-    setState(() {
-      _isAddingService = true;
-    });
+    setState(() => _isAddingService = true);
 
-    final authProvider = context.read<AuthProvider>();
-    final userId = authProvider.user?.id;
-
+    final userId = context.read<AuthProvider>().user?.id;
     if (userId == null) {
-      setState(() {
-        _isAddingService = false;
-      });
+      setState(() => _isAddingService = false);
       return;
     }
 
     try {
-      final newService = await _billService.createService(
-        userId,
-        name,
-        null, // Sin descripción por ahora
-      );
-
+      final newService = await _billService.createService(userId, name, null);
       setState(() {
         _isAddingService = false;
         _newServiceController.clear();
       });
 
       if (newService != null && mounted) {
-        // ✅ Recargar servicios y seleccionar el nuevo
+        // 🔄 Recargar servicios y seleccionar el nuevo
         await _loadData();
-
-        // Seleccionar el servicio recién creado
-        setState(() {
-          _selectedServiceId = newService['id'];
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ Servicio "$name" creado exitosamente'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        setState(() => _selectedServiceId = newService['id']);
+        _showSuccess('Servicio "$name" creado');
       }
     } catch (e) {
-      setState(() {
-        _isAddingService = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('❌ Error al crear el servicio'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      setState(() => _isAddingService = false);
+      _showError('Error al crear el servicio');
     }
   }
 
-  // 📝 Guardar factura
+  // 📝 Guardar factura (crear o actualizar)
   Future<void> _saveBill() async {
-    if (_formKey.currentState!.validate()) {
-      if (_selectedServiceId == null) {
-        _showError('Selecciona un servicio');
-        return;
-      }
-      if (_selectedCategoryId == null) {
-        _showError('Selecciona una categoría');
-        return;
-      }
-
-      setState(() {
-        _isLoading = true;
-      });
-
-      final authProvider = context.read<AuthProvider>();
-      final userId = authProvider.user?.id;
-
-      if (userId == null) {
-        _showError('Usuario no autenticado');
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-      // Crear objeto Bill y enviarlo al servicio
-      final bill = Bill(
-        id: '',
-        userId: userId,
-        serviceId: _selectedServiceId!,
-        categoryId: _selectedCategoryId!,
-        amount: double.parse(_amountController.text),
-        dueDate: _selectedDate,
-        status: _selectedStatus,
-        description: _descriptionController.text.isNotEmpty
-            ? _descriptionController.text
-            : null,
-        isRecurring: _isRecurring,
-        reminderDays: _reminderDays,
-      );
-
-      final createdBill = await _billService.createBill(bill);
-
-      setState(() {
-        _isLoading = false;
-      });
-
-      if (createdBill != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Factura creada exitosamente'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pop(
-          context,
-          true,
-        ); // Regresar a la pantalla anterior indicando que se creó una factura
-      } else if (mounted) {
-        _showError('Error al crear la factura');
-      }
+    if (!_formKey.currentState!.validate()) return;
+    if (_selectedServiceId == null) {
+      _showError('Selecciona un servicio');
+      return;
     }
+    if (_selectedCategoryId == null) {
+      _showError('Selecciona una categoría');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final userId = context.read<AuthProvider>().user?.id;
+    if (userId == null) {
+      _showError('Usuario no autenticado');
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    // 🔄 Crear objeto Bill (con o sin ID)
+    final bill = Bill(
+      id: _isEditing ? widget.bill!.id : '', // ✅ Si edita, usa ID existente
+      userId: userId,
+      serviceId: _selectedServiceId!,
+      categoryId: _selectedCategoryId!,
+      amount: double.parse(_amountController.text),
+      dueDate: _selectedDate,
+      status: _selectedStatus,
+      description: _descriptionController.text.isNotEmpty
+          ? _descriptionController.text
+          : null,
+      isRecurring: _isRecurring,
+      reminderDays: _reminderDays,
+    );
+
+    // ✅ Guardar o actualizar
+    final result = _isEditing
+        ? await _billService.updateBill(bill) // ✏️ Editar
+        : await _billService.createBill(bill); // 📝 Crear
+
+    setState(() => _isLoading = false);
+
+    if (result != null && mounted) {
+      _showSuccess(_isEditing ? 'Factura actualizada' : 'Factura creada');
+      Navigator.pop(context, true);
+    } else if (mounted) {
+      _showError('Error al ${_isEditing ? 'actualizar' : 'crear'} la factura');
+    }
+  }
+
+  // ✅ Mostrar éxito
+  void _showSuccess(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('✅ $msg'), backgroundColor: Colors.green),
+    );
   }
 
   // ❌ Mostrar error
-  void _showError(String message) {
+  void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('❌ $message'), backgroundColor: Colors.red),
+      SnackBar(content: Text('❌ $msg'), backgroundColor: Colors.red),
     );
   }
 
   // 📅 Seleccionar fecha
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
+  Future<void> _selectDate() async {
+    final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
     );
-    if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
-    }
+    if (picked != null) setState(() => _selectedDate = picked);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Agregar Factura'),
+        title: Text(_isEditing ? 'Editar Factura' : 'Agregar Factura'),
         backgroundColor: Colors.green[700],
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadData,
-            tooltip: 'Recargar',
-          ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
           IconButton(
             icon: const Icon(Icons.save),
             onPressed: _isLoading ? null : _saveBill,
@@ -265,11 +237,13 @@ class _AddBillScreenState extends State<AddBillScreen> {
               child: Form(
                 key: _formKey,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.stretch, // ✅ Alineación de los campos
                   children: [
-                    // 🏢 Servicio (con opción de agregar nuevo)
+                    // 🏢 Servicio
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment
+                          .start, // ✅ Alineación superior para el botón
                       children: [
                         Expanded(
                           flex: 3,
@@ -280,43 +254,33 @@ class _AddBillScreenState extends State<AddBillScreen> {
                               prefixIcon: Icon(Icons.business),
                             ),
                             value: _selectedServiceId,
-                            items: _services.map((service) {
-                              return DropdownMenuItem<String>(
-                                value: service['id'],
-                                child: Text(service['name']),
-                              );
-                            }).toList(),
-                            onChanged: (value) {
-                              setState(() {
-                                _selectedServiceId = value;
-                              });
-                            },
-                            validator: (value) {
-                              if (value == null) {
-                                return 'Selecciona un servicio';
-                              }
-                              return null;
-                            },
+                            items: _services
+                                .map(
+                                  (s) => DropdownMenuItem<String>(
+                                    // ✅ Especificar tipo
+                                    value: s['id'],
+                                    child: Text(s['name']),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) =>
+                                setState(() => _selectedServiceId = v),
+                            validator: (v) =>
+                                v == null ? 'Selecciona un servicio' : null,
                           ),
                         ),
                         const SizedBox(width: 8),
-                        // ➕ Botón para agregar nuevo servicio
                         Expanded(
                           flex: 1,
-                          child: Tooltip(
-                            message: 'Agregar nuevo servicio',
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.add_circle,
-                                color: Colors.green,
-                                size: 40,
-                              ),
-                              onPressed: _isAddingService
-                                  ? null
-                                  : () {
-                                      _showAddServiceDialog();
-                                    },
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.add_circle,
+                              color: Colors.green,
+                              size: 40,
                             ),
+                            onPressed: _isAddingService
+                                ? null
+                                : _showAddServiceDialog,
                           ),
                         ),
                       ],
@@ -331,29 +295,24 @@ class _AddBillScreenState extends State<AddBillScreen> {
                         prefixIcon: Icon(Icons.category),
                       ),
                       value: _selectedCategoryId,
-                      items: _categories.map((category) {
-                        return DropdownMenuItem<String>(
-                          value: category['id'],
-                          child: Row(
-                            children: [
-                              Text(category['icon'] ?? '📌'),
-                              const SizedBox(width: 8),
-                              Text(category['name']),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedCategoryId = value;
-                        });
-                      },
-                      validator: (value) {
-                        if (value == null) {
-                          return 'Selecciona una categoría';
-                        }
-                        return null;
-                      },
+                      items: _categories
+                          .map(
+                            (c) => DropdownMenuItem<String>(
+                              // ✅ Especificar tipo
+                              value: c['id'],
+                              child: Row(
+                                children: [
+                                  Text(c['icon'] ?? '📌'),
+                                  const SizedBox(width: 8),
+                                  Text(c['name']),
+                                ],
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() => _selectedCategoryId = v),
+                      validator: (v) =>
+                          v == null ? 'Selecciona una categoría' : null,
                     ),
                     const SizedBox(height: 16),
 
@@ -367,24 +326,19 @@ class _AddBillScreenState extends State<AddBillScreen> {
                         suffixText: '₲',
                       ),
                       keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Ingresa el monto';
-                        }
-                        if (double.tryParse(value) == null) {
-                          return 'Ingresa un número válido';
-                        }
-                        if (double.parse(value) <= 0) {
-                          return 'El monto debe ser mayor a 0';
-                        }
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Ingresa el monto';
+                        final n = double.tryParse(v);
+                        if (n == null) return 'Número inválido';
+                        if (n <= 0) return 'Monto mayor a 0';
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
 
-                    // 📅 Fecha de vencimiento
+                    // 📅 Fecha
                     InkWell(
-                      onTap: () => _selectDate(context),
+                      onTap: _selectDate,
                       child: InputDecorator(
                         decoration: const InputDecoration(
                           labelText: 'Fecha de vencimiento *',
@@ -396,7 +350,6 @@ class _AddBillScreenState extends State<AddBillScreen> {
                           children: [
                             Text(
                               '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
-                              style: const TextStyle(fontSize: 16),
                             ),
                             const Icon(Icons.arrow_drop_down),
                           ],
@@ -417,21 +370,16 @@ class _AddBillScreenState extends State<AddBillScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // 🔄 Factura recurrente
+                    // 🔄 Recurrente
                     SwitchListTile(
                       title: const Text('Factura recurrente'),
                       subtitle: const Text('Se repite cada mes'),
                       value: _isRecurring,
-                      onChanged: (value) {
-                        setState(() {
-                          _isRecurring = value;
-                        });
-                      },
+                      onChanged: (v) => setState(() => _isRecurring = v),
                       activeColor: Colors.green,
                     ),
-                    const SizedBox(height: 8),
 
-                    // 🔔 Días de recordatorio
+                    // 🔔 Recordatorio
                     Row(
                       children: [
                         const Text('Recordatorio: '),
@@ -441,13 +389,10 @@ class _AddBillScreenState extends State<AddBillScreen> {
                             min: 1,
                             max: 10,
                             divisions: 9,
-                            label: '$_reminderDays días antes',
+                            label: '$_reminderDays días',
                             activeColor: Colors.green,
-                            onChanged: (value) {
-                              setState(() {
-                                _reminderDays = value.round();
-                              });
-                            },
+                            onChanged: (v) =>
+                                setState(() => _reminderDays = v.round()),
                           ),
                         ),
                         Text(
@@ -470,7 +415,8 @@ class _AddBillScreenState extends State<AddBillScreen> {
                       ),
                       value: _selectedStatus,
                       items: const [
-                        DropdownMenuItem(
+                        DropdownMenuItem<String>(
+                          // ✅ Especificar tipo
                           value: 'pending',
                           child: Row(
                             children: [
@@ -480,7 +426,8 @@ class _AddBillScreenState extends State<AddBillScreen> {
                             ],
                           ),
                         ),
-                        DropdownMenuItem(
+                        DropdownMenuItem<String>(
+                          // ✅ Especificar tipo
                           value: 'paid',
                           child: Row(
                             children: [
@@ -491,11 +438,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
                           ),
                         ),
                       ],
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedStatus = value!;
-                        });
-                      },
+                      onChanged: (v) => setState(() => _selectedStatus = v!),
                     ),
                     const SizedBox(height: 24),
 
@@ -516,9 +459,11 @@ class _AddBillScreenState extends State<AddBillScreen> {
                             ? const CircularProgressIndicator(
                                 color: Colors.white,
                               )
-                            : const Text(
-                                'Guardar Factura',
-                                style: TextStyle(fontSize: 16),
+                            : Text(
+                                _isEditing
+                                    ? 'Actualizar Factura'
+                                    : 'Guardar Factura',
+                                style: const TextStyle(fontSize: 16),
                               ),
                       ),
                     ),
@@ -529,7 +474,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
     );
   }
 
-  // 🏢 Dialog para agregar nuevo servicio
+  // 🏢 Dialog para agregar servicio
   void _showAddServiceDialog() {
     showDialog(
       context: context,
@@ -593,4 +538,4 @@ class _AddBillScreenState extends State<AddBillScreen> {
       ),
     );
   }
-}
+} // aqui termina la clase AddBillScreen

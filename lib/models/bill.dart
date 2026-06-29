@@ -71,6 +71,13 @@ class Bill {
       updatedAt: json['updated_at'] != null
           ? DateTime.parse(json['updated_at'])
           : null,
+      // ✅ AGREGAR ESTO: Procesar datos anidados
+      service: json['services'] != null
+          ? Service.fromJson(json['services'])
+          : null,
+      category: json['categories'] != null
+          ? Category.fromJson(json['categories'])
+          : null,
     );
   }
 

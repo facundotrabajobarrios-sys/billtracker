@@ -17,8 +17,8 @@ class Service {
   // 📥 Crear desde JSON
   factory Service.fromJson(Map<String, dynamic> json) {
     return Service(
-      id: json['id'] ?? '',
-      name: json['name'] ?? '',
+      id: json['id'] ?? '', // ✅ Si es null, usa ''
+      name: json['name'] ?? 'Sin nombre', // ✅ Si es null, usa 'Sin nombre'
       description: json['description'],
       logo: json['logo'],
       createdAt: json['created_at'] != null

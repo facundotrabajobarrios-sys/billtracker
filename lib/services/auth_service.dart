@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/supabase_config.dart';
 import '../models/user.dart';
 
@@ -30,13 +31,17 @@ class AuthService {
           'points': 0,
         });
 
-        return User.fromJson({
+        final user = User.fromJson({
           'id': response.user!.id,
           'email': email,
           'name': name,
           'level': 0,
           'points': 0,
         });
+
+        // ✅ Guardar sesión
+        await _saveSession(user);
+        return user;
       }
       return null;
     } catch (e) {
@@ -60,7 +65,11 @@ class AuthService {
             .eq('id', response.user!.id)
             .single();
 
-        return User.fromJson(userData);
+        final user = User.fromJson(userData);
+
+        // ✅ Guardar sesión
+        await _saveSession(user);
+        return user;
       }
       return null;
     } catch (e) {
@@ -72,23 +81,32 @@ class AuthService {
   // 🚪 Cerrar sesión
   Future<void> logout() async {
     await _client.auth.signOut();
+    // ✅ Eliminar sesión guardada
+    await _clearSession();
   }
 
-  // 👤 Obtener usuario actual
+  // 👤 Obtener usuario actual (primero de Supabase, luego de caché)
   Future<User?> getCurrentUser() async {
+    // 1️⃣ Intentar obtener sesión de Supabase
     final session = _client.auth.currentSession;
-    if (session == null) return null;
-
-    try {
-      final userData = await _client
-          .from('users')
-          .select()
-          .eq('id', session.user.id)
-          .single();
-      return User.fromJson(userData);
-    } catch (e) {
-      return null;
+    if (session != null) {
+      try {
+        final userData = await _client
+            .from('users')
+            .select()
+            .eq('id', session.user.id)
+            .single();
+        final user = User.fromJson(userData);
+        await _saveSession(user);
+        return user;
+      } catch (e) {
+        // Si falla, intentar con caché
+        return await _getCachedUser();
+      }
     }
+
+    // 2️⃣ Si no hay sesión en Supabase, buscar en caché
+    return await _getCachedUser();
   }
 
   // 🔑 Recuperar contraseña
@@ -99,6 +117,63 @@ class AuthService {
     } catch (e) {
       print('❌ Error al enviar correo de recuperación: $e');
       return false;
+    }
+  }
+
+  // 💾 Guardar sesión en SharedPreferences
+  Future<void> _saveSession(User user) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_id', user.id);
+      await prefs.setString('user_email', user.email);
+      await prefs.setString('user_name', user.name ?? '');
+      await prefs.setInt('user_level', user.level ?? 0);
+      await prefs.setInt('user_points', user.points ?? 0);
+      print('✅ Sesión guardada para: ${user.email}');
+    } catch (e) {
+      print('❌ Error al guardar sesión: $e');
+    }
+  }
+
+  // 📖 Obtener usuario de caché
+  Future<User?> _getCachedUser() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final id = prefs.getString('user_id');
+      final email = prefs.getString('user_email');
+      final name = prefs.getString('user_name');
+      final level = prefs.getInt('user_level') ?? 0;
+      final points = prefs.getInt('user_points') ?? 0;
+
+      if (id != null && email != null) {
+        print('✅ Usuario cargado de caché: $email');
+        return User(
+          id: id,
+          email: email,
+          name: name ?? 'Usuario',
+          level: level,
+          points: points,
+        );
+      }
+      return null;
+    } catch (e) {
+      print('❌ Error al cargar caché: $e');
+      return null;
+    }
+  }
+
+  // 🗑️ Eliminar sesión guardada
+  Future<void> _clearSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('user_id');
+      await prefs.remove('user_email');
+      await prefs.remove('user_name');
+      await prefs.remove('user_level');
+      await prefs.remove('user_points');
+      print('✅ Sesión eliminada');
+    } catch (e) {
+      print('❌ Error al eliminar sesión: $e');
     }
   }
 }

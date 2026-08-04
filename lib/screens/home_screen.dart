@@ -1,3 +1,5 @@
+// ignore_for_file: unused_import
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
@@ -19,8 +21,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
-
-  // 📋 Lista de pantallas
   final List<Widget> _screens = [];
 
   @override
@@ -70,7 +70,6 @@ class _HomeContentState extends State<_HomeContent> {
   final _billService = BillService();
   final _notiService = NotificationService();
 
-  // 📊 Datos del dashboard
   int _pending = 0;
   int _paid = 0;
   int _overdue = 0;
@@ -86,7 +85,6 @@ class _HomeContentState extends State<_HomeContent> {
     _loadUnreadCount();
   }
 
-  // 📥 Cargar datos
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
 
@@ -112,7 +110,6 @@ class _HomeContentState extends State<_HomeContent> {
     setState(() => _isLoading = false);
   }
 
-  // 🔔 Cargar notificaciones no leídas
   Future<void> _loadUnreadCount() async {
     final userId = context.read<AuthProvider>().user?.id;
     if (userId != null) {
@@ -131,7 +128,6 @@ class _HomeContentState extends State<_HomeContent> {
         backgroundColor: Colors.green[700],
         foregroundColor: Colors.white,
         actions: [
-          // 🔔 Notificaciones con contador
           Stack(
             children: [
               IconButton(
@@ -192,7 +188,6 @@ class _HomeContentState extends State<_HomeContent> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 👋 Saludo
                     Text(
                       '¡Hola ${user?.name ?? 'Usuario'}! 👋',
                       style: const TextStyle(
@@ -207,7 +202,6 @@ class _HomeContentState extends State<_HomeContent> {
                     ),
                     const SizedBox(height: 20),
 
-                    // 📊 Tarjetas de resumen
                     Row(
                       children: [
                         _buildCard(
@@ -245,7 +239,6 @@ class _HomeContentState extends State<_HomeContent> {
                     ),
                     const SizedBox(height: 20),
 
-                    // 📋 Próximos vencimientos
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -295,7 +288,6 @@ class _HomeContentState extends State<_HomeContent> {
     );
   }
 
-  // 🃏 Tarjeta de resumen
   Widget _buildCard(String title, int count, Color color, IconData icon) {
     return Expanded(
       child: Card(
@@ -330,7 +322,6 @@ class _HomeContentState extends State<_HomeContent> {
     );
   }
 
-  // 🃏 Item de factura próxima
   Widget _buildBillItem(Bill bill) {
     final serviceName = bill.service?.name ?? 'Sin servicio';
     final categoryIcon = bill.category?.icon ?? '📌';

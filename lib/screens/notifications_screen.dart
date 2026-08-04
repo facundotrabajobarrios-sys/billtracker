@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/auth_provider.dart';
 import '../services/notification_service.dart';
 import '../models/notification.dart';
 
@@ -24,36 +22,69 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   // 📥 Cargar notificaciones
-  Future<void> _loadNotifications() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadNotifications({bool showLoading = true}) async {
+    if (!mounted) return;
 
-    final userId = context.read<AuthProvider>().user?.id;
-    if (userId != null) {
-      _notifications = await _notificationService.getNotifications(userId);
+    if (showLoading) {
+      setState(() => _isLoading = true);
     }
 
+    final freshNotifications = await _notificationService.getNotifications(
+      null,
+    );
+    if (!mounted) return;
+    setState(() {
+      _notifications = freshNotifications;
+    });
+
+    if (!mounted) return;
     setState(() => _isLoading = false);
   }
 
   // ✅ Marcar como leída
   Future<void> _markAsRead(String notificationId) async {
-    await _notificationService.markAsRead(notificationId);
-    _loadNotifications();
+    final success = await _notificationService.markAsRead(notificationId);
+
+    if (success) {
+      await _loadNotifications();
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo marcar la notificación como leída'),
+        ),
+      );
+    }
   }
 
   // ✅ Marcar todas como leídas
   Future<void> _markAllAsRead() async {
-    final userId = context.read<AuthProvider>().user?.id;
-    if (userId != null) {
-      await _notificationService.markAllAsRead(userId);
-      _loadNotifications();
-    }
+    await _notificationService.markAllAsRead(null);
+    await _loadNotifications();
   }
 
   // 🗑️ Eliminar notificación
   Future<void> _deleteNotification(String notificationId) async {
-    await _notificationService.deleteNotification(notificationId);
-    _loadNotifications();
+    final previousNotifications = List<NotificationModel>.from(_notifications);
+    setState(() {
+      _notifications.removeWhere((n) => n.id == notificationId);
+    });
+
+    final success = await _notificationService.deleteNotification(
+      notificationId,
+    );
+
+    if (!success) {
+      if (!mounted) return;
+      setState(() {
+        _notifications = previousNotifications;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo eliminar la notificación')),
+      );
+    } else {
+      await _loadNotifications(showLoading: false);
+    }
   }
 
   // 🎨 Color según tipo
@@ -127,7 +158,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       leading: CircleAvatar(
                         backgroundColor: _getTypeColor(
                           notification.type,
-                        ).withOpacity(0.2),
+                        ).withValues(alpha: 0.2),
                         child: Icon(
                           _getTypeIcon(notification.type),
                           color: _getTypeColor(notification.type),

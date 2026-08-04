@@ -32,7 +32,6 @@ class MyApp extends StatelessWidget {
       ],
       child: Consumer<AuthProvider>(
         builder: (context, authProvider, _) {
-          // 🔄 Mientras carga, mostrar pantalla de carga
           if (authProvider.isLoading) {
             return const MaterialApp(
               home: Scaffold(body: Center(child: CircularProgressIndicator())),
@@ -41,7 +40,6 @@ class MyApp extends StatelessWidget {
           }
 
           final bool isAuth = authProvider.isAuthenticated;
-          print('🔍 isAuthenticated: $isAuth');
 
           return MaterialApp(
             title: 'BillTracker',
@@ -51,9 +49,7 @@ class MyApp extends StatelessWidget {
               ),
               useMaterial3: true,
             ),
-            // ✅ Usar home directamente
             home: isAuth ? const HomeScreen() : const LoginScreen(),
-            // ✅ Registrar rutas para navegación con nombre
             routes: {
               '/login': (context) => const LoginScreen(),
               '/home': (context) => const HomeScreen(),

@@ -46,12 +46,10 @@ class NotificationModel {
     );
   }
 
-  // 📤 Convertir a JSON
+  // 📤 Convertir a JSON - CORREGIDO
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
+    final map = <String, dynamic>{
       'user_id': userId,
-      'bill_id': billId,
       'title': title,
       'message': message,
       'type': type,
@@ -60,6 +58,19 @@ class NotificationModel {
       'sent_at': sentAt?.toIso8601String(),
       'created_at': createdAt?.toIso8601String(),
     };
+
+    // ✅ SOLO enviar id si NO está vacío (Supabase genera UUID)
+    if (id.isNotEmpty) {
+      map['id'] = id;
+    }
+
+    // ✅ SOLO enviar bill_id si NO es null
+    if (billId != null && billId!.isNotEmpty) {
+      map['bill_id'] = billId;
+    }
+
+    print('🔍 map enviado a Supabase: $map');
+    return map;
   }
 
   // 🎨 Color según tipo

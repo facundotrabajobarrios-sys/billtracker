@@ -1,68 +1,98 @@
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import '../models/notification.dart';
-import '../config/supabase_config.dart';
 
-// 🔔 Servicio de notificaciones
 class NotificationService {
-  // 📦 Instancia única (Singleton)
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  // 🔗 Conexión a Supabase
   supabase.SupabaseClient get _client => supabase.Supabase.instance.client;
 
-  // 📥 Obtener todas las notificaciones del usuario
-  Future<List<NotificationModel>> getNotifications(String userId) async {
+  Future<String?> _getCurrentUserId() async {
     try {
+      final userResponse = await _client.auth.getUser();
+      final sessionUserId = userResponse.user?.id;
+      if (sessionUserId != null && sessionUserId.isNotEmpty) {
+        return sessionUserId;
+      }
+    } catch (e) {
+      print('❌ Error al obtener el usuario autenticado: $e');
+    }
+
+    final sessionUserId = _client.auth.currentSession?.user.id;
+    if (sessionUserId != null && sessionUserId.isNotEmpty) {
+      return sessionUserId;
+    }
+
+    return null;
+  }
+
+  Future<List<NotificationModel>> getNotifications(String? userId) async {
+    try {
+      final resolvedUserId = userId ?? await _getCurrentUserId();
+      if (resolvedUserId == null || resolvedUserId.isEmpty) {
+        throw Exception(
+          'No hay un usuario autenticado para cargar notificaciones',
+        );
+      }
+
       final response = await _client
           .from('notifications')
           .select()
-          .eq('user_id', userId)
+          .eq('user_id', resolvedUserId)
           .order('created_at', ascending: false);
 
-      if (response != null && response is List) {
-        return response
-            .map((json) => NotificationModel.fromJson(json))
-            .toList();
-      }
-      return [];
+      return response.map((json) => NotificationModel.fromJson(json)).toList();
     } catch (e) {
       print('❌ Error al obtener notificaciones: $e');
       return [];
     }
   }
 
-  // 📥 Obtener notificaciones no leídas
-  Future<List<NotificationModel>> getUnreadNotifications(String userId) async {
+  Future<List<NotificationModel>> getUnreadNotifications(String? userId) async {
     try {
+      final resolvedUserId = userId ?? await _getCurrentUserId();
+      if (resolvedUserId == null || resolvedUserId.isEmpty) {
+        throw Exception(
+          'No hay un usuario autenticado para cargar notificaciones',
+        );
+      }
+
       final response = await _client
           .from('notifications')
           .select()
-          .eq('user_id', userId)
+          .eq('user_id', resolvedUserId)
           .eq('is_read', false)
           .order('created_at', ascending: false);
 
-      if (response != null && response is List) {
-        return response
-            .map((json) => NotificationModel.fromJson(json))
-            .toList();
-      }
-      return [];
+      return response.map((json) => NotificationModel.fromJson(json)).toList();
     } catch (e) {
       print('❌ Error al obtener notificaciones no leídas: $e');
       return [];
     }
   }
 
-  // 📝 Crear una notificación
+  // ✅ CREAR NOTIFICACIÓN - CORREGIDO
   Future<NotificationModel?> createNotification(
     NotificationModel notification,
   ) async {
     try {
+      final resolvedUserId = notification.userId.isNotEmpty
+          ? notification.userId
+          : await _getCurrentUserId();
+
+      if (resolvedUserId == null || resolvedUserId.isEmpty) {
+        throw Exception(
+          'No hay un usuario autenticado para crear notificaciones',
+        );
+      }
+
+      final payload = notification.toJson();
+      payload['user_id'] = resolvedUserId;
+
       final response = await _client
           .from('notifications')
-          .insert(notification.toJson())
+          .insert(payload)
           .select()
           .single();
 
@@ -73,27 +103,44 @@ class NotificationService {
     }
   }
 
-  // ✅ Marcar notificación como leída
-  Future<bool> markAsRead(String notificationId) async {
+  Future<bool> markAsRead(String notificationId, {String? userId}) async {
     try {
-      await _client
+      final resolvedUserId = userId ?? await _getCurrentUserId();
+      if (resolvedUserId == null || resolvedUserId.isEmpty) {
+        throw Exception(
+          'No hay un usuario autenticado para marcar notificaciones',
+        );
+      }
+
+      final response = await _client
           .from('notifications')
           .update({'is_read': true})
-          .eq('id', notificationId);
-      return true;
+          .eq('id', notificationId)
+          .eq('user_id', resolvedUserId)
+          .select();
+
+      final updatedCount = response is List ? response.length : 0;
+      print('📝 Notificaciones marcadas como leídas: $updatedCount');
+      return updatedCount > 0;
     } catch (e) {
       print('❌ Error al marcar notificación como leída: $e');
       return false;
     }
   }
 
-  // ✅ Marcar todas como leídas
-  Future<bool> markAllAsRead(String userId) async {
+  Future<bool> markAllAsRead(String? userId) async {
     try {
+      final resolvedUserId = userId ?? await _getCurrentUserId();
+      if (resolvedUserId == null || resolvedUserId.isEmpty) {
+        throw Exception(
+          'No hay un usuario autenticado para marcar notificaciones',
+        );
+      }
+
       await _client
           .from('notifications')
           .update({'is_read': true})
-          .eq('user_id', userId)
+          .eq('user_id', resolvedUserId)
           .eq('is_read', false);
       return true;
     } catch (e) {
@@ -102,36 +149,62 @@ class NotificationService {
     }
   }
 
-  // 🗑️ Eliminar notificación
-  Future<bool> deleteNotification(String notificationId) async {
+  // ✅ ELIMINAR NOTIFICACIÓN - CORREGIDO
+  Future<bool> deleteNotification(
+    String notificationId, {
+    String? userId,
+  }) async {
     try {
-      await _client.from('notifications').delete().eq('id', notificationId);
-      return true;
+      if (notificationId.isEmpty) {
+        print('⚠️ ID de notificación vacío, no se puede eliminar');
+        return false;
+      }
+
+      final resolvedUserId = userId ?? await _getCurrentUserId();
+      if (resolvedUserId == null || resolvedUserId.isEmpty) {
+        throw Exception(
+          'No hay un usuario autenticado para eliminar notificaciones',
+        );
+      }
+
+      final response = await _client
+          .from('notifications')
+          .delete()
+          .eq('id', notificationId)
+          .eq('user_id', resolvedUserId)
+          .select();
+
+      final deletedCount = response is List ? response.length : 0;
+      print(
+        '🗑️ Notificación eliminada: $notificationId (filas: $deletedCount)',
+      );
+      return deletedCount > 0;
     } catch (e) {
       print('❌ Error al eliminar notificación: $e');
       return false;
     }
   }
 
-  // 🔔 Crear notificación de recordatorio para una factura
-  Future<void> createBillReminder(
+  // ✅ CREAR RECORDATORIO - CORREGIDO
+  Future<NotificationModel?> createBillReminder(
     String userId,
-    String billId,
+    String? billId,
     String title,
     String message,
   ) async {
     final notification = NotificationModel(
-      id: '',
+      id: '', // ← Supabase generará el ID
       userId: userId,
       billId: billId,
       title: title,
       message: message,
       type: 'reminder',
     );
-    await createNotification(notification);
+    return await createNotification(
+      notification,
+    ); // ✅ Devuelve la notificación con ID
   }
 
-  // 📊 Contar notificaciones no leídas
   Future<int> countUnread(String userId) async {
     try {
       final notifications = await getUnreadNotifications(userId);

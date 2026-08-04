@@ -3,19 +3,29 @@ import '../models/gamification.dart';
 import '../models/bill.dart';
 import '../services/gamification_service.dart';
 
-// 🏆 Proveedor de Gamificación
 class GamificationProvider extends ChangeNotifier {
   final GamificationService _service = GamificationService();
   Gamification? _gamification;
   bool _isLoading = false;
+  List<String> _newBadges = [];
+  bool _showCelebration = false;
+  bool _showConfetti = false;
 
   Gamification? get gamification => _gamification;
   bool get isLoading => _isLoading;
+  List<String> get newBadges => _newBadges;
+  bool get showCelebration => _showCelebration;
+  bool get showConfetti => _showConfetti;
 
-  // 📥 Cargar gamificación
-  Future<void> loadGamification(String userId) async {
-    _isLoading = true;
+  void refreshUi() {
     notifyListeners();
+  }
+
+  Future<void> loadGamification(String userId, {bool silent = false}) async {
+    if (!silent) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
     try {
       _gamification = await _service.getGamification(userId);
@@ -23,11 +33,12 @@ class GamificationProvider extends ChangeNotifier {
       print('❌ Error al cargar gamificación: $e');
     }
 
-    _isLoading = false;
-    notifyListeners();
+    if (!silent) {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  // 🎯 Procesar pago
   Future<Gamification?> processPayment(
     String userId,
     Bill bill,
@@ -42,14 +53,20 @@ class GamificationProvider extends ChangeNotifier {
       _gamification = await _service.processPayment(userId, bill, wasOnTime);
 
       if (_gamification != null) {
-        // Notificar nuevas insignias
         final newBadges = _gamification!.unlockedBadges;
         final unlocked = newBadges
             .where((b) => !oldBadges.contains(b))
             .toList();
 
         if (unlocked.isNotEmpty) {
-          await _service.notifyNewBadges(userId, oldBadges, newBadges);
+          _newBadges = unlocked;
+          _showCelebration = true;
+          _showConfetti = true;
+          print('🎉 Confeti activado para: ${unlocked.first}');
+        } else {
+          _newBadges = [];
+          _showCelebration = false;
+          _showConfetti = false;
         }
       }
 
@@ -63,20 +80,38 @@ class GamificationProvider extends ChangeNotifier {
     }
   }
 
-  // 🔄 Actualizar gamificación local
+  void setCelebrationState(List<String> unlockedBadges) {
+    _newBadges = unlockedBadges;
+    _showCelebration = unlockedBadges.isNotEmpty;
+    _showConfetti = unlockedBadges.isNotEmpty;
+    notifyListeners();
+  }
+
+  void resetCelebration() {
+    _showCelebration = false;
+    _newBadges = [];
+    _showConfetti = false;
+    notifyListeners();
+  }
+
   void updateGamification(Gamification newGamification) {
     _gamification = newGamification;
     notifyListeners();
   }
 
-  // 📊 Obtener insignias con estado
   List<AchievementBadge> getBadgesWithStatus() {
-    // ✅ AchievementBadge
     final allBadges = Gamification.getAvailableBadges();
     final unlocked = _gamification?.unlockedBadges ?? [];
-
     return allBadges.map((badge) {
       return badge.copyWith(isUnlocked: unlocked.contains(badge.id));
     }).toList();
+  }
+
+  List<AchievementBadge> getNewBadgeDetails() {
+    final allBadges = Gamification.getAvailableBadges();
+    return allBadges
+        .where((b) => _newBadges.contains(b.id))
+        .map((b) => b.copyWith(isUnlocked: true))
+        .toList();
   }
 }

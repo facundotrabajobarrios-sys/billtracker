@@ -205,12 +205,14 @@ class GamificationService {
         ),
       );
 
+      // ✅ Si no hay billId, pasar null
       await notificationService.createBillReminder(
         userId,
-        '',
+        null, // ✅ Pasar null en lugar de ''
         '🎉 ¡Nueva Insignia Desbloqueada!',
         'Has obtenido "${badge.name}" - ${badge.description}',
       );
+      print('🔍 createBillReminder llamado con null');
     }
   }
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/gamification_provider.dart';
 import '../services/bill_service.dart';
+import '../models/gamification.dart';
 import '../models/bill.dart';
 import 'add_bill_screen.dart';
 
@@ -60,6 +62,7 @@ class _BillsScreenState extends State<BillsScreen> {
 
     if (confirm == true) {
       final success = await _billService.deleteBill(bill.id);
+      if (!mounted) return;
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -74,18 +77,50 @@ class _BillsScreenState extends State<BillsScreen> {
 
   // ✅ Marcar como pagada (con gamificación)
   Future<void> _markAsPaid(Bill bill) async {
+    final userId = context.read<AuthProvider>().user?.id;
+    final gamificationProvider = context.read<GamificationProvider>();
+    final previousBadges =
+        gamificationProvider.gamification?.unlockedBadges ?? [];
+
     final updated = await _billService.markAsPaidWithGamification(bill.id);
 
-    if (updated != null) {
+    if (updated != null && userId != null) {
+      await gamificationProvider.loadGamification(userId, silent: true);
+      if (!mounted) return;
+      final currentBadges =
+          gamificationProvider.gamification?.unlockedBadges ?? [];
+      final newBadges = currentBadges
+          .where((badgeId) => !previousBadges.contains(badgeId))
+          .toList();
+
+      if (newBadges.isNotEmpty) {
+        gamificationProvider.setCelebrationState(newBadges);
+      } else {
+        gamificationProvider.resetCelebration();
+      }
+
+      String message = '✅ Factura marcada como pagada. ¡+10 puntos!';
+
+      if (newBadges.isNotEmpty) {
+        final allBadges = Gamification.getAvailableBadges();
+        final badgeNames = newBadges
+            .map((id) => allBadges.firstWhere((b) => b.id == id).name)
+            .join(', ');
+        message = '🎉 ¡NUEVA INSIGNIA! $badgeNames 🎉';
+      }
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Factura marcada como pagada. ¡+10 puntos!'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 3),
+        SnackBar(
+          content: Text(message),
+          backgroundColor: newBadges.isNotEmpty ? Colors.amber : Colors.green,
+          duration: Duration(seconds: newBadges.isNotEmpty ? 4 : 3),
         ),
       );
+
       _loadBills();
     } else {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('❌ Error al marcar como pagada'),

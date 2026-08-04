@@ -43,6 +43,7 @@ dependencies:
   lottie: ^3.3.3
   intl: ^0.20.2
   shared_preferences: ^2.5.5 #esto es para guardar datos en el dispositivo del usuario
+  confetti: ^0.8.0 #agregamos esta dependencia para mostrar confeti cuando el usuario complete una acción
   # flutter_local_notifications: ^17.2.1+1
 
   # The following adds the Cupertino Icons font to your application.

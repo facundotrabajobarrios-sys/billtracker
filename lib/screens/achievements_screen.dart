@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/gamification_provider.dart';
 import '../models/gamification.dart';
+import '../widgets/simple_confetti.dart';
 
 // 🏆 Pantalla de logros y gamificación
 class AchievementsScreen extends StatefulWidget {
@@ -25,7 +26,8 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
 
     if (userId != null) {
       final gamificationProvider = context.read<GamificationProvider>();
-      await gamificationProvider.loadGamification(userId);
+      await gamificationProvider.loadGamification(userId, silent: true);
+      gamificationProvider.refreshUi();
     }
   }
 
@@ -34,63 +36,72 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
     final gamificationProvider = context.watch<GamificationProvider>();
     final gamification = gamificationProvider.gamification;
     final isLoading = gamificationProvider.isLoading;
+    final showCelebration = gamificationProvider.showCelebration;
+    final newBadges = gamificationProvider.getNewBadgeDetails();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mis Logros'),
-        backgroundColor: Colors.green[700],
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadData,
-            tooltip: 'Recargar',
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        // ✅ PULL-TO-REFRESH
-        onRefresh: _loadData,
-        color: Colors.green,
-        backgroundColor: Colors.white,
-        child: isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : gamification == null
-            ? _buildEmptyState()
-            : SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 🏆 Resumen
-                    _buildSummaryCard(gamification),
-                    const SizedBox(height: 24),
-
-                    // 📊 Barra de progreso
-                    _buildProgressBar(gamification),
-                    const SizedBox(height: 24),
-
-                    // 🏅 Insignias
-                    const Text(
-                      '🏅 Insignias',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+    return SimpleConfetti(
+      trigger: gamificationProvider.showConfetti,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Mis Logros'),
+          backgroundColor: Colors.green[700],
+          foregroundColor: Colors.white,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadData,
+              tooltip: 'Recargar',
+            ),
+          ],
+        ),
+        body: RefreshIndicator(
+          onRefresh: _loadData,
+          color: Colors.green,
+          backgroundColor: Colors.white,
+          child: isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : gamification == null
+              ? _buildEmptyState()
+              : SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSummaryCard(gamification),
+                      const SizedBox(height: 24),
+                      _buildProgressBar(gamification),
+                      const SizedBox(height: 24),
+                      const Text(
+                        '🏅 Insignias',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildBadgesGrid(
-                      gamificationProvider.getBadgesWithStatus(),
-                    ),
-                  ],
+                      const SizedBox(height: 12),
+                      _buildBadgesGrid(
+                        gamificationProvider.getBadgesWithStatus(),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+        ),
+        floatingActionButton: showCelebration && newBadges.isNotEmpty
+            ? FloatingActionButton.extended(
+                onPressed: () {
+                  _showCelebrationDialog(newBadges);
+                  gamificationProvider.resetCelebration();
+                },
+                backgroundColor: Colors.amber,
+                icon: const Icon(Icons.emoji_events),
+                label: Text('🎉 ${newBadges.length} nueva(s) insignia(s)!'),
+              )
+            : null,
       ),
     );
   }
 
-  // 📊 Tarjeta de resumen
   Widget _buildSummaryCard(Gamification gamification) {
     return Card(
       elevation: 4,
@@ -151,7 +162,6 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
     );
   }
 
-  // 📊 Item de estadística
   Widget _buildStatItem(
     String label,
     String value,
@@ -178,7 +188,6 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
     );
   }
 
-  // 📊 Barra de progreso
   Widget _buildProgressBar(Gamification gamification) {
     final progress = gamification.progressToNextLevel.clamp(0.0, 1.0);
 
@@ -225,7 +234,6 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
     );
   }
 
-  // 🏅 Grid de insignias
   Widget _buildBadgesGrid(List<AchievementBadge> badges) {
     return GridView.builder(
       shrinkWrap: true,
@@ -244,7 +252,6 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
     );
   }
 
-  // 🏅 Tarjeta de insignia
   Widget _buildBadgeCard(AchievementBadge badge) {
     return Card(
       elevation: badge.isUnlocked ? 2 : 0,
@@ -303,7 +310,6 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
     );
   }
 
-  // 📄 Estado vacío
   Widget _buildEmptyState() {
     return const Center(
       child: Column(
@@ -321,6 +327,48 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
             'Cada pago a tiempo suma puntos y te acerca a nuevas insignias',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 14, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCelebrationDialog(List<AchievementBadge> newBadges) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.emoji_events, color: Colors.amber),
+            SizedBox(width: 8),
+            Text('🎉 ¡Nuevas Insignias!'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Has desbloqueado nuevas insignias:',
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            ...newBadges.map(
+              (badge) => ListTile(
+                leading: Text(badge.icon, style: const TextStyle(fontSize: 30)),
+                title: Text(
+                  badge.name,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text(badge.description),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('¡Increíble!'),
           ),
         ],
       ),

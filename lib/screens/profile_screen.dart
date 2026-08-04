@@ -21,7 +21,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    // ✅ CORREGIDO: Usar WidgetsBinding para ejecutar después del build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
   }
 
   Future<void> _loadData() async {
@@ -29,11 +32,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final userId = context.read<AuthProvider>().user?.id;
     if (userId != null) {
+      // ✅ Cargar gamificación automáticamente
+      final gamificationProvider = context.read<GamificationProvider>();
+      await gamificationProvider.loadGamification(userId);
+
+      // ✅ Cargar total de facturas
       final summary = await _billService.getSummary(userId);
       _totalBills = summary['total'] ?? 0;
     }
 
-    setState(() => _isLoading = false);
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -126,7 +136,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       onPressed: () async {
                         await authProvider.logout();
                         if (context.mounted) {
-                          // ✅ Usar MaterialPageRoute en lugar de Named
                           Navigator.pushReplacement(
                             context,
                             MaterialPageRoute(

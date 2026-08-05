@@ -1,7 +1,15 @@
 // ignore_for_file: unused_import
 
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+
 import '../providers/auth_provider.dart';
 import '../services/bill_service.dart';
 import '../services/notification_service.dart';
@@ -74,13 +82,20 @@ class _HomeContentState extends State<_HomeContent> {
   int _paid = 0;
   int _overdue = 0;
   int _total = 0;
-  List<Bill> _upcomingBills = [];
+  List<Bill> _allBills = [];
   bool _isLoading = true;
   int _unreadCount = 0;
+
+  // Filtros: por defecto últimos 30 días
+  late DateTime _startDate;
+  late DateTime _endDate;
+  String? _selectedCategory;
 
   @override
   void initState() {
     super.initState();
+    _endDate = DateTime.now();
+    _startDate = _endDate.subtract(const Duration(days: 30));
     _loadData();
     _loadUnreadCount();
   }
@@ -98,10 +113,7 @@ class _HomeContentState extends State<_HomeContent> {
         _total = summary['total'] ?? 0;
 
         final bills = await _billService.getBills(userId);
-        _upcomingBills = bills
-            .where((b) => b.status != 'paid')
-            .take(3)
-            .toList();
+        _allBills = bills;
       } catch (e) {
         print('❌ Error cargando datos: $e');
       }
@@ -118,9 +130,130 @@ class _HomeContentState extends State<_HomeContent> {
     }
   }
 
+  List<Bill> get _filteredBills {
+    return _allBills.where((b) {
+      final due = b.dueDate;
+      final inRange = (due.isAtSameMomentAs(_startDate) || due.isAfter(_startDate)) &&
+          (due.isAtSameMomentAs(_endDate) || due.isBefore(_endDate));
+      final matchesCategory = _selectedCategory == null ||
+          b.category?.name == _selectedCategory;
+      return inRange && matchesCategory;
+    }).toList()
+      ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+  }
+
+  // Genera CSV simple a partir de los bills filtrados y lo copia al portapapeles
+  Future<void> _exportCsvToClipboard() async {
+    final bills = _filteredBills;
+    if (bills.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay datos para exportar')),
+      );
+      return;
+    }
+
+    final buffer = StringBuffer();
+    buffer.writeln('id,service,category,due_date,amount,status');
+    for (final b in bills) {
+      final id = b.id;
+      final service = b.service?.name?.replaceAll(',', ' ') ?? '';
+      final category = b.category?.name?.replaceAll(',', ' ') ?? '';
+      final due = DateFormat('yyyy-MM-dd').format(b.dueDate);
+      final amount = b.amount.toStringAsFixed(2);
+      final status = b.status;
+      buffer.writeln('$id,$service,$category,$due,$amount,$status');
+    }
+
+    await Clipboard.setData(ClipboardData(text: buffer.toString()));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('CSV copiado al portapapeles')),
+    );
+  }
+
+  // Genera un PDF sencillo con los bills filtrados y abre el diálogo para compartir
+  Future<void> _exportPdfAndShare() async {
+    final bills = _filteredBills;
+    if (bills.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay datos para exportar')),
+      );
+      return;
+    }
+
+    final doc = pw.Document();
+
+    doc.addPage(
+      pw.MultiPage(
+        build: (context) {
+          return [
+            pw.Header(
+              level: 0,
+              child: pw.Text('Resumen de facturas', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+            ),
+            pw.Paragraph(text: 'Periodo: ${DateFormat('yyyy-MM-dd').format(_startDate)} — ${DateFormat('yyyy-MM-dd').format(_endDate)}'),
+            pw.SizedBox(height: 8),
+            pw.Table.fromTextArray(
+              headers: ['ID', 'Servicio', 'Categoría', 'Vence', 'Monto', 'Estado'],
+              data: bills.map((b) => [
+                b.id,
+                b.service?.name ?? '',
+                b.category?.name ?? '',
+                DateFormat('yyyy-MM-dd').format(b.dueDate),
+                b.amount.toStringAsFixed(2),
+                b.status,
+              ]).toList(),
+            ),
+            pw.SizedBox(height: 12),
+            pw.Paragraph(text: 'Generado: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}'),
+          ];
+        },
+      ),
+    );
+
+    final pdfBytes = await doc.save();
+
+    try {
+      await Printing.sharePdf(bytes: pdfBytes, filename: 'billtracker_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.pdf');
+    } catch (e) {
+      // Fallback: guardar en portapapeles como base64 (no ideal) o mostrar error
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error compartiendo PDF: $e')),
+      );
+    }
+  }
+
+  Future<void> _pickStartDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _startDate,
+      firstDate: DateTime(2000),
+      lastDate: _endDate,
+    );
+    if (picked != null) {
+      setState(() => _startDate = picked);
+    }
+  }
+
+  Future<void> _pickEndDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _endDate,
+      firstDate: _startDate,
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) {
+      setState(() => _endDate = picked);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
+
+    // Datos para la gráfica (pie simple)
+    final pendingCount = _allBills.where((b) => b.status == 'pending').length;
+    final paidCount = _allBills.where((b) => b.status == 'paid').length;
+    final overdueCount = _allBills.where((b) => b.status == 'overdue' || b.isOverdue).length;
 
     return Scaffold(
       appBar: AppBar(
@@ -200,8 +333,71 @@ class _HomeContentState extends State<_HomeContent> {
                       'Nivel: ${user?.level ?? 0} | Puntos: ${user?.points ?? 0}',
                       style: const TextStyle(fontSize: 16, color: Colors.grey),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
 
+                    // Filtros y Export
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _pickStartDate,
+                            child: Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.date_range, size: 18),
+                                    const SizedBox(width: 8),
+                                    Text('Desde: ${DateFormat('yyyy-MM-dd').format(_startDate)}'),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _pickEndDate,
+                            child: Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.date_range, size: 18),
+                                    const SizedBox(width: 8),
+                                    Text('Hasta: ${DateFormat('yyyy-MM-dd').format(_endDate)}'),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: _exportCsvToClipboard,
+                              icon: const Icon(Icons.download),
+                              label: const Text('Export CSV'),
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton.icon(
+                              onPressed: _exportPdfAndShare,
+                              icon: const Icon(Icons.picture_as_pdf),
+                              label: const Text('Export PDF'),
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Cards
                     Row(
                       children: [
                         _buildCard(
@@ -239,47 +435,88 @@ class _HomeContentState extends State<_HomeContent> {
                     ),
                     const SizedBox(height: 20),
 
+                    // Gráfica simple (pie) + próximos vencimientos
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          '📋 Próximos vencimientos',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                        SizedBox(
+                          width: 180,
+                          height: 180,
+                          child: Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: PieChart(
+                                PieChartData(
+                                  sections: [
+                                    PieChartSectionData(
+                                      value: pendingCount.toDouble(),
+                                      color: Colors.orange,
+                                      title: pendingCount.toString(),
+                                      radius: 40,
+                                    ),
+                                    PieChartSectionData(
+                                      value: paidCount.toDouble(),
+                                      color: Colors.green,
+                                      title: paidCount.toString(),
+                                      radius: 40,
+                                    ),
+                                    PieChartSectionData(
+                                      value: overdueCount.toDouble(),
+                                      color: Colors.red,
+                                      title: overdueCount.toString(),
+                                      radius: 40,
+                                    ),
+                                  ],
+                                  sectionsSpace: 2,
+                                  centerSpaceRadius: 20,
+                                ),
+                              ),
+                            ),
                           ),
                         ),
-                        TextButton(
-                          onPressed: () {
-                            final homeState = context
-                                .findAncestorStateOfType<_HomeScreenState>();
-                            homeState?.setState(() {
-                              homeState._selectedIndex = 1;
-                            });
-                          },
-                          child: const Text(
-                            'Ver todas',
-                            style: TextStyle(color: Colors.green),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    '📋 Próximos vencimientos',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+                                      homeState?.setState(() { homeState._selectedIndex = 1; });
+                                    },
+                                    child: const Text(
+                                      'Ver todas',
+                                      style: TextStyle(color: Colors.green),
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 8),
+
+                              _filteredBills.isEmpty
+                                  ? const Text('🎉 No hay facturas en el periodo seleccionado', style: TextStyle(color: Colors.grey))
+                                  : SizedBox(
+                                      height: 220,
+                                      child: ListView.builder(
+                                        itemCount: _filteredBills.length,
+                                        itemBuilder: (_, i) => _buildBillItem(_filteredBills[i]),
+                                      ),
+                                    ),
+                            ],
                           ),
                         ),
                       ],
-                    ),
-                    Expanded(
-                      child: _upcomingBills.isEmpty
-                          ? const Center(
-                              child: Text(
-                                '🎉 No hay facturas próximas',
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            )
-                          : ListView.builder(
-                              itemCount: _upcomingBills.length,
-                              itemBuilder: (_, i) =>
-                                  _buildBillItem(_upcomingBills[i]),
-                            ),
                     ),
                   ],
                 ),

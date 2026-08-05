@@ -44,6 +44,11 @@ dependencies:
   intl: ^0.20.2
   shared_preferences: ^2.5.5 #esto es para guardar datos en el dispositivo del usuario
   confetti: ^0.8.0 #agregamos esta dependencia para mostrar confeti cuando el usuario complete una acción
+  # Gráficas simples
+  fl_chart: ^0.60.0
+  # PDF export y compartir
+  pdf: ^3.10.0
+  printing: ^5.10.0
   # flutter_local_notifications: ^17.2.1+1
 
   # The following adds the Cupertino Icons font to your application.

@@ -29,23 +29,26 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
-  final List<Widget> _screens = [];
 
-  @override
-  void initState() {
-    super.initState();
-    _screens.addAll([
-      const _HomeContent(),
-      const BillsScreen(),
-      const AchievementsScreen(),
-      const ProfileScreen(),
-    ]);
+  Widget _screenForIndex(int index) {
+    switch (index) {
+      case 0:
+        return const _HomeContent();
+      case 1:
+        return const BillsScreen();
+      case 2:
+        return const AchievementsScreen();
+      case 3:
+        return const ProfileScreen();
+      default:
+        return const _HomeContent();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_selectedIndex],
+      body: _screenForIndex(_selectedIndex),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         currentIndex: _selectedIndex,
@@ -140,6 +143,114 @@ class _HomeContentState extends State<_HomeContent> {
       return inRange && matchesCategory;
     }).toList()
       ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+  }
+
+  // Datos agrupados por mes (últimos 6 meses)
+  List<double> get _monthlySpending {
+    final now = DateTime.now();
+    const months = 6;
+    final List<double> sums = List.filled(months, 0.0);
+
+    for (int i = 0; i < months; i++) {
+      final m = DateTime(now.year, now.month - (months - 1 - i), 1);
+      final monthStart = DateTime(m.year, m.month, 1);
+      final monthEnd = DateTime(m.year, m.month + 1, 1).subtract(const Duration(seconds: 1));
+      final total = _allBills.where((b) {
+        return b.dueDate.isAfter(monthStart.subtract(const Duration(seconds: 1))) &&
+            b.dueDate.isBefore(monthEnd.add(const Duration(seconds: 1)));
+      }).fold<double>(0.0, (prev, b) => prev + (b.amount ?? 0.0));
+      sums[i] = total;
+    }
+
+    return sums;
+  }
+
+  List<String> get _monthlyLabels {
+    final now = DateTime.now();
+    const months = 6;
+    return List.generate(months, (i) {
+      final m = DateTime(now.year, now.month - (months - 1 - i), 1);
+      return DateFormat('MMM').format(m);
+    });
+  }
+
+  Widget _buildMonthlyBarChart() {
+    final data = _monthlySpending;
+    final labels = _monthlyLabels;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: BarChart(
+          BarChartData(
+            alignment: BarChartAlignment.spaceAround,
+            maxY: (data.isNotEmpty ? (data.reduce((a, b) => a > b ? a : b) * 1.2) : 100.0),
+            titlesData: FlTitlesData(
+              show: true,
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  getTitlesWidget: (double value, TitleMeta meta) {
+                    final index = value.toInt();
+                    if (index < 0 || index >= labels.length) return const SizedBox();
+                    return Text(labels[index], style: const TextStyle(fontSize: 10));
+                  },
+                ),
+              ),
+              leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40)),
+            ),
+            barGroups: List.generate(data.length, (i) {
+              return BarChartGroupData(x: i, barRods: [
+                BarChartRodData(toY: data[i], color: Colors.green, width: 14),
+              ]);
+            }),
+            gridData: FlGridData(show: false),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMonthlyLineChart() {
+    final data = _monthlySpending;
+    final labels = _monthlyLabels;
+
+    final spots = List.generate(data.length, (i) => FlSpot(i.toDouble(), data[i]));
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: LineChart(
+          LineChartData(
+            minY: 0,
+            maxY: (data.isNotEmpty ? (data.reduce((a, b) => a > b ? a : b) * 1.2) : 100.0),
+            titlesData: FlTitlesData(
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  getTitlesWidget: (double value, TitleMeta meta) {
+                    final index = value.toInt();
+                    if (index < 0 || index >= labels.length) return const SizedBox();
+                    return Text(labels[index], style: const TextStyle(fontSize: 10));
+                  },
+                ),
+              ),
+              leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40)),
+            ),
+            lineBarsData: [
+              LineChartBarData(
+                spots: spots,
+                isCurved: true,
+                color: Colors.blue,
+                barWidth: 3,
+                dotData: FlDotData(show: true),
+              ),
+            ],
+            gridData: FlGridData(show: false),
+          ),
+        ),
+      ),
+    );
   }
 
   // Genera CSV simple a partir de los bills filtrados y lo copia al portapapeles
@@ -316,210 +427,206 @@ class _HomeContentState extends State<_HomeContent> {
                 await _loadData();
                 await _loadUnreadCount();
               },
-              child: Padding(
+              // Usar ListView para evitar BottomOverflow y permitir desplazamiento
+              child: ListView(
                 padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '¡Hola ${user?.name ?? 'Usuario'}! 👋',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
+                children: [
+                  Text(
+                    '¡Hola ${user?.name ?? 'Usuario'}! 👋',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Nivel: ${user?.level ?? 0} | Puntos: ${user?.points ?? 0}',
-                      style: const TextStyle(fontSize: 16, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 16),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Nivel: ${user?.level ?? 0} | Puntos: ${user?.points ?? 0}',
+                    style: const TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
 
-                    // Filtros y Export
-                    Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: _pickStartDate,
-                            child: Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.date_range, size: 18),
-                                    const SizedBox(width: 8),
-                                    Text('Desde: ${DateFormat('yyyy-MM-dd').format(_startDate)}'),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: _pickEndDate,
-                            child: Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.date_range, size: 18),
-                                    const SizedBox(width: 8),
-                                    Text('Hasta: ${DateFormat('yyyy-MM-dd').format(_endDate)}'),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: _exportCsvToClipboard,
-                              icon: const Icon(Icons.download),
-                              label: const Text('Export CSV'),
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
-                            ),
-                            const SizedBox(width: 8),
-                            ElevatedButton.icon(
-                              onPressed: _exportPdfAndShare,
-                              icon: const Icon(Icons.picture_as_pdf),
-                              label: const Text('Export PDF'),
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Cards
-                    Row(
-                      children: [
-                        _buildCard(
-                          'Pendientes',
-                          _pending,
-                          Colors.orange,
-                          Icons.pending_actions,
-                        ),
-                        const SizedBox(width: 12),
-                        _buildCard(
-                          'Pagadas',
-                          _paid,
-                          Colors.green,
-                          Icons.check_circle,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        _buildCard(
-                          'Vencidas',
-                          _overdue,
-                          Colors.red,
-                          Icons.warning,
-                        ),
-                        const SizedBox(width: 12),
-                        _buildCard(
-                          'Total',
-                          _total,
-                          Colors.blue,
-                          Icons.receipt_long,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Gráfica simple (pie) + próximos vencimientos
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 180,
-                          height: 180,
+                  // Filtros y Export
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: _pickStartDate,
                           child: Card(
                             child: Padding(
                               padding: const EdgeInsets.all(12),
-                              child: PieChart(
-                                PieChartData(
-                                  sections: [
-                                    PieChartSectionData(
-                                      value: pendingCount.toDouble(),
-                                      color: Colors.orange,
-                                      title: pendingCount.toString(),
-                                      radius: 40,
-                                    ),
-                                    PieChartSectionData(
-                                      value: paidCount.toDouble(),
-                                      color: Colors.green,
-                                      title: paidCount.toString(),
-                                      radius: 40,
-                                    ),
-                                    PieChartSectionData(
-                                      value: overdueCount.toDouble(),
-                                      color: Colors.red,
-                                      title: overdueCount.toString(),
-                                      radius: 40,
-                                    ),
-                                  ],
-                                  sectionsSpace: 2,
-                                  centerSpaceRadius: 20,
-                                ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.date_range, size: 18),
+                                  const SizedBox(width: 8),
+                                  Text('Desde: ${DateFormat('yyyy-MM-dd').format(_startDate)}'),
+                                ],
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: _pickEndDate,
+                          child: Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
                                 children: [
-                                  const Text(
-                                    '📋 Próximos vencimientos',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  TextButton(
-                                    onPressed: () {
-                                      final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-                                      homeState?.setState(() { homeState._selectedIndex = 1; });
-                                    },
-                                    child: const Text(
-                                      'Ver todas',
-                                      style: TextStyle(color: Colors.green),
-                                    ),
-                                  ),
+                                  const Icon(Icons.date_range, size: 18),
+                                  const SizedBox(width: 8),
+                                  Text('Hasta: ${DateFormat('yyyy-MM-dd').format(_endDate)}'),
                                 ],
                               ),
-
-                              const SizedBox(height: 8),
-
-                              _filteredBills.isEmpty
-                                  ? const Text('🎉 No hay facturas en el periodo seleccionado', style: TextStyle(color: Colors.grey))
-                                  : SizedBox(
-                                      height: 220,
-                                      child: ListView.builder(
-                                        itemCount: _filteredBills.length,
-                                        itemBuilder: (_, i) => _buildBillItem(_filteredBills[i]),
-                                      ),
-                                    ),
-                            ],
+                            ),
                           ),
                         ),
-                      ],
+                      ),
+                      const SizedBox(width: 8),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: _exportCsvToClipboard,
+                            icon: const Icon(Icons.download),
+                            label: const Text('Export CSV'),
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: _exportPdfAndShare,
+                            icon: const Icon(Icons.picture_as_pdf),
+                            label: const Text('Export PDF'),
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Cards
+                  Row(
+                    children: [
+                      _buildCard(
+                        'Pendientes',
+                        _pending,
+                        Colors.orange,
+                        Icons.pending_actions,
+                      ),
+                      const SizedBox(width: 12),
+                      _buildCard(
+                        'Pagadas',
+                        _paid,
+                        Colors.green,
+                        Icons.check_circle,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      _buildCard(
+                        'Vencidas',
+                        _overdue,
+                        Colors.red,
+                        Icons.warning,
+                      ),
+                      const SizedBox(width: 12),
+                      _buildCard(
+                        'Total',
+                        _total,
+                        Colors.blue,
+                        Icons.receipt_long,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Gráfica simple (pie)
+                  Center(
+                    child: SizedBox(
+                      width: 220,
+                      height: 220,
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: PieChart(
+                            PieChartData(
+                              sections: [
+                                PieChartSectionData(
+                                  value: pendingCount.toDouble(),
+                                  color: Colors.orange,
+                                  title: pendingCount.toString(),
+                                  radius: 50,
+                                ),
+                                PieChartSectionData(
+                                  value: paidCount.toDouble(),
+                                  color: Colors.green,
+                                  title: paidCount.toString(),
+                                  radius: 50,
+                                ),
+                                PieChartSectionData(
+                                  value: overdueCount.toDouble(),
+                                  color: Colors.red,
+                                  title: overdueCount.toString(),
+                                  radius: 50,
+                                ),
+                              ],
+                              sectionsSpace: 2,
+                              centerSpaceRadius: 24,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Gráficos mensuales: barras y líneas
+                  const Text('Gastos mensuales (últimos 6 meses)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  SizedBox(height: 200, child: _buildMonthlyBarChart()),
+                  const SizedBox(height: 12),
+                  SizedBox(height: 180, child: _buildMonthlyLineChart()),
+
+                  const SizedBox(height: 20),
+
+                  // Próximos vencimientos
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        '📋 Próximos vencimientos',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+                          homeState?.setState(() { homeState._selectedIndex = 1; });
+                        },
+                        child: const Text(
+                          'Ver todas',
+                          style: TextStyle(color: Colors.green),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  _filteredBills.isEmpty
+                      ? const Text('🎉 No hay facturas en el periodo seleccionado', style: TextStyle(color: Colors.grey))
+                      : Column(
+                          children: _filteredBills.map((b) => _buildBillItem(b)).toList(),
+                        ),
+                ],
               ),
             ),
     );

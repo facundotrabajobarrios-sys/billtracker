@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/gamification_provider.dart';
 import '../services/bill_service.dart';
+import '../services/push_notification_service.dart';
 import '../models/gamification.dart';
 import '../models/bill.dart';
 import 'add_bill_screen.dart';
@@ -64,6 +65,10 @@ class _BillsScreenState extends State<BillsScreen> {
       final success = await _billService.deleteBill(bill.id);
       if (!mounted) return;
       if (success) {
+        await PushNotificationService().cancelNotification(
+          PushNotificationService().generateId(bill.id),
+        );
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('🗑️ Factura eliminada'),

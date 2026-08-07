@@ -51,6 +51,38 @@ class BillService {
     }
   }
 
+  // 📥 Obtener una factura por ID
+  Future<Bill?> getBillById(String billId) async {
+    try {
+      final response = await client
+          .from('bills')
+          .select('''
+             *,
+             services (
+               id,
+               name,
+               description
+             ),
+             categories (
+               id,
+               name,
+               icon,
+               color
+             )
+           ''')
+          .eq('id', billId)
+          .single();
+
+      if (response != null) {
+        return Bill.fromJson(response);
+      }
+      return null;
+    } catch (e) {
+      print('❌ Error al obtener factura por ID: $e');
+      return null;
+    }
+  }
+
   // 📥 Obtener facturas por estado
   Future<List<Bill>> getBillsByStatus(String userId, String status) async {
     try {

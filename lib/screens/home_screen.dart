@@ -13,6 +13,7 @@ import 'package:printing/printing.dart';
 import '../providers/auth_provider.dart';
 import '../services/bill_service.dart';
 import '../services/notification_service.dart';
+import '../services/push_notification_service.dart';
 import '../models/bill.dart';
 import 'bills_screen.dart';
 import 'achievements_screen.dart';
@@ -136,13 +137,13 @@ class _HomeContentState extends State<_HomeContent> {
   List<Bill> get _filteredBills {
     return _allBills.where((b) {
       final due = b.dueDate;
-      final inRange = (due.isAtSameMomentAs(_startDate) || due.isAfter(_startDate)) &&
+      final inRange =
+          (due.isAtSameMomentAs(_startDate) || due.isAfter(_startDate)) &&
           (due.isAtSameMomentAs(_endDate) || due.isBefore(_endDate));
-      final matchesCategory = _selectedCategory == null ||
-          b.category?.name == _selectedCategory;
+      final matchesCategory =
+          _selectedCategory == null || b.category?.name == _selectedCategory;
       return inRange && matchesCategory;
-    }).toList()
-      ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+    }).toList()..sort((a, b) => a.dueDate.compareTo(b.dueDate));
   }
 
   // Datos agrupados por mes (últimos 6 meses)
@@ -154,11 +155,19 @@ class _HomeContentState extends State<_HomeContent> {
     for (int i = 0; i < months; i++) {
       final m = DateTime(now.year, now.month - (months - 1 - i), 1);
       final monthStart = DateTime(m.year, m.month, 1);
-      final monthEnd = DateTime(m.year, m.month + 1, 1).subtract(const Duration(seconds: 1));
-      final total = _allBills.where((b) {
-        return b.dueDate.isAfter(monthStart.subtract(const Duration(seconds: 1))) &&
-            b.dueDate.isBefore(monthEnd.add(const Duration(seconds: 1)));
-      }).fold<double>(0.0, (prev, b) => prev + (b.amount ?? 0.0));
+      final monthEnd = DateTime(
+        m.year,
+        m.month + 1,
+        1,
+      ).subtract(const Duration(seconds: 1));
+      final total = _allBills
+          .where((b) {
+            return b.dueDate.isAfter(
+                  monthStart.subtract(const Duration(seconds: 1)),
+                ) &&
+                b.dueDate.isBefore(monthEnd.add(const Duration(seconds: 1)));
+          })
+          .fold<double>(0.0, (prev, b) => prev + (b.amount ?? 0.0));
       sums[i] = total;
     }
 
@@ -184,7 +193,9 @@ class _HomeContentState extends State<_HomeContent> {
         child: BarChart(
           BarChartData(
             alignment: BarChartAlignment.spaceAround,
-            maxY: (data.isNotEmpty ? (data.reduce((a, b) => a > b ? a : b) * 1.2) : 100.0),
+            maxY: (data.isNotEmpty
+                ? (data.reduce((a, b) => a > b ? a : b) * 1.2)
+                : 100.0),
             titlesData: FlTitlesData(
               show: true,
               bottomTitles: AxisTitles(
@@ -192,17 +203,26 @@ class _HomeContentState extends State<_HomeContent> {
                   showTitles: true,
                   getTitlesWidget: (double value, TitleMeta meta) {
                     final index = value.toInt();
-                    if (index < 0 || index >= labels.length) return const SizedBox();
-                    return Text(labels[index], style: const TextStyle(fontSize: 10));
+                    if (index < 0 || index >= labels.length)
+                      return const SizedBox();
+                    return Text(
+                      labels[index],
+                      style: const TextStyle(fontSize: 10),
+                    );
                   },
                 ),
               ),
-              leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40)),
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: true, reservedSize: 40),
+              ),
             ),
             barGroups: List.generate(data.length, (i) {
-              return BarChartGroupData(x: i, barRods: [
-                BarChartRodData(toY: data[i], color: Colors.green, width: 14),
-              ]);
+              return BarChartGroupData(
+                x: i,
+                barRods: [
+                  BarChartRodData(toY: data[i], color: Colors.green, width: 14),
+                ],
+              );
             }),
             gridData: FlGridData(show: false),
           ),
@@ -215,7 +235,10 @@ class _HomeContentState extends State<_HomeContent> {
     final data = _monthlySpending;
     final labels = _monthlyLabels;
 
-    final spots = List.generate(data.length, (i) => FlSpot(i.toDouble(), data[i]));
+    final spots = List.generate(
+      data.length,
+      (i) => FlSpot(i.toDouble(), data[i]),
+    );
 
     return Card(
       child: Padding(
@@ -223,19 +246,27 @@ class _HomeContentState extends State<_HomeContent> {
         child: LineChart(
           LineChartData(
             minY: 0,
-            maxY: (data.isNotEmpty ? (data.reduce((a, b) => a > b ? a : b) * 1.2) : 100.0),
+            maxY: (data.isNotEmpty
+                ? (data.reduce((a, b) => a > b ? a : b) * 1.2)
+                : 100.0),
             titlesData: FlTitlesData(
               bottomTitles: AxisTitles(
                 sideTitles: SideTitles(
                   showTitles: true,
                   getTitlesWidget: (double value, TitleMeta meta) {
                     final index = value.toInt();
-                    if (index < 0 || index >= labels.length) return const SizedBox();
-                    return Text(labels[index], style: const TextStyle(fontSize: 10));
+                    if (index < 0 || index >= labels.length)
+                      return const SizedBox();
+                    return Text(
+                      labels[index],
+                      style: const TextStyle(fontSize: 10),
+                    );
                   },
                 ),
               ),
-              leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40)),
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: true, reservedSize: 40),
+              ),
             ),
             lineBarsData: [
               LineChartBarData(
@@ -299,23 +330,46 @@ class _HomeContentState extends State<_HomeContent> {
           return [
             pw.Header(
               level: 0,
-              child: pw.Text('Resumen de facturas', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+              child: pw.Text(
+                'Resumen de facturas',
+                style: pw.TextStyle(
+                  fontSize: 18,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
             ),
-            pw.Paragraph(text: 'Periodo: ${DateFormat('yyyy-MM-dd').format(_startDate)} — ${DateFormat('yyyy-MM-dd').format(_endDate)}'),
+            pw.Paragraph(
+              text:
+                  'Periodo: ${DateFormat('yyyy-MM-dd').format(_startDate)} — ${DateFormat('yyyy-MM-dd').format(_endDate)}',
+            ),
             pw.SizedBox(height: 8),
             pw.Table.fromTextArray(
-              headers: ['ID', 'Servicio', 'Categoría', 'Vence', 'Monto', 'Estado'],
-              data: bills.map((b) => [
-                b.id,
-                b.service?.name ?? '',
-                b.category?.name ?? '',
-                DateFormat('yyyy-MM-dd').format(b.dueDate),
-                b.amount.toStringAsFixed(2),
-                b.status,
-              ]).toList(),
+              headers: [
+                'ID',
+                'Servicio',
+                'Categoría',
+                'Vence',
+                'Monto',
+                'Estado',
+              ],
+              data: bills
+                  .map(
+                    (b) => [
+                      b.id,
+                      b.service?.name ?? '',
+                      b.category?.name ?? '',
+                      DateFormat('yyyy-MM-dd').format(b.dueDate),
+                      b.amount.toStringAsFixed(2),
+                      b.status,
+                    ],
+                  )
+                  .toList(),
             ),
             pw.SizedBox(height: 12),
-            pw.Paragraph(text: 'Generado: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}'),
+            pw.Paragraph(
+              text:
+                  'Generado: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
+            ),
           ];
         },
       ),
@@ -324,12 +378,16 @@ class _HomeContentState extends State<_HomeContent> {
     final pdfBytes = await doc.save();
 
     try {
-      await Printing.sharePdf(bytes: pdfBytes, filename: 'billtracker_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.pdf');
+      await Printing.sharePdf(
+        bytes: pdfBytes,
+        filename:
+            'billtracker_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.pdf',
+      );
     } catch (e) {
       // Fallback: guardar en portapapeles como base64 (no ideal) o mostrar error
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error compartiendo PDF: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error compartiendo PDF: $e')));
     }
   }
 
@@ -357,6 +415,25 @@ class _HomeContentState extends State<_HomeContent> {
     }
   }
 
+  Future<void> _sendTestNotification() async {
+    try {
+      await PushNotificationService().showImmediateNotification(
+        title: 'Prueba de BillTracker',
+        body: 'Esta notificación confirma que el sistema funciona.',
+        payload: 'test-notification',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('✅ Notificación de prueba enviada')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('❌ Error al enviar la prueba: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
@@ -364,7 +441,9 @@ class _HomeContentState extends State<_HomeContent> {
     // Datos para la gráfica (pie simple)
     final pendingCount = _allBills.where((b) => b.status == 'pending').length;
     final paidCount = _allBills.where((b) => b.status == 'paid').length;
-    final overdueCount = _allBills.where((b) => b.status == 'overdue' || b.isOverdue).length;
+    final overdueCount = _allBills
+        .where((b) => b.status == 'overdue' || b.isOverdue)
+        .length;
 
     return Scaffold(
       appBar: AppBar(
@@ -409,6 +488,11 @@ class _HomeContentState extends State<_HomeContent> {
                   ),
                 ),
             ],
+          ),
+          IconButton(
+            icon: const Icon(Icons.notifications_active),
+            onPressed: _sendTestNotification,
+            tooltip: 'Probar notificación',
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -458,7 +542,9 @@ class _HomeContentState extends State<_HomeContent> {
                                 children: [
                                   const Icon(Icons.date_range, size: 18),
                                   const SizedBox(width: 8),
-                                  Text('Desde: ${DateFormat('yyyy-MM-dd').format(_startDate)}'),
+                                  Text(
+                                    'Desde: ${DateFormat('yyyy-MM-dd').format(_startDate)}',
+                                  ),
                                 ],
                               ),
                             ),
@@ -476,7 +562,9 @@ class _HomeContentState extends State<_HomeContent> {
                                 children: [
                                   const Icon(Icons.date_range, size: 18),
                                   const SizedBox(width: 8),
-                                  Text('Hasta: ${DateFormat('yyyy-MM-dd').format(_endDate)}'),
+                                  Text(
+                                    'Hasta: ${DateFormat('yyyy-MM-dd').format(_endDate)}',
+                                  ),
                                 ],
                               ),
                             ),
@@ -491,14 +579,18 @@ class _HomeContentState extends State<_HomeContent> {
                             onPressed: _exportCsvToClipboard,
                             icon: const Icon(Icons.download),
                             label: const Text('Export CSV'),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green[700],
+                            ),
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton.icon(
                             onPressed: _exportPdfAndShare,
                             icon: const Icon(Icons.picture_as_pdf),
                             label: const Text('Export PDF'),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green[700],
+                            ),
                           ),
                         ],
                       ),
@@ -587,7 +679,10 @@ class _HomeContentState extends State<_HomeContent> {
                   const SizedBox(height: 12),
 
                   // Gráficos mensuales: barras y líneas
-                  const Text('Gastos mensuales (últimos 6 meses)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Gastos mensuales (últimos 6 meses)',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 8),
                   SizedBox(height: 200, child: _buildMonthlyBarChart()),
                   const SizedBox(height: 12),
@@ -608,8 +703,11 @@ class _HomeContentState extends State<_HomeContent> {
                       ),
                       TextButton(
                         onPressed: () {
-                          final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-                          homeState?.setState(() { homeState._selectedIndex = 1; });
+                          final homeState = context
+                              .findAncestorStateOfType<_HomeScreenState>();
+                          homeState?.setState(() {
+                            homeState._selectedIndex = 1;
+                          });
                         },
                         child: const Text(
                           'Ver todas',
@@ -622,9 +720,14 @@ class _HomeContentState extends State<_HomeContent> {
                   const SizedBox(height: 8),
 
                   _filteredBills.isEmpty
-                      ? const Text('🎉 No hay facturas en el periodo seleccionado', style: TextStyle(color: Colors.grey))
+                      ? const Text(
+                          '🎉 No hay facturas en el periodo seleccionado',
+                          style: TextStyle(color: Colors.grey),
+                        )
                       : Column(
-                          children: _filteredBills.map((b) => _buildBillItem(b)).toList(),
+                          children: _filteredBills
+                              .map((b) => _buildBillItem(b))
+                              .toList(),
                         ),
                 ],
               ),

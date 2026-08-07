@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/bill_service.dart';
+import '../services/push_notification_service.dart';
 import '../models/bill.dart';
 
 // 📄 Pantalla para agregar/editar factura
@@ -138,6 +139,24 @@ class _AddBillScreenState extends State<AddBillScreen> {
     }
   }
 
+  Future<void> _scheduleBillReminder(Bill bill) async {
+    final serviceName = bill.service?.name ?? 'Factura';
+    final reminderDays = bill.reminderDays ?? 3;
+    final reminderDate = bill.dueDate.subtract(Duration(days: reminderDays));
+
+    if (reminderDate.isAfter(DateTime.now())) {
+      final notificationId = PushNotificationService().generateId(bill.id);
+      await PushNotificationService().scheduleNotification(
+        id: notificationId,
+        title: '📋 Recordatorio de pago',
+        body: 'La factura de $serviceName vence en $reminderDays días',
+        scheduledDate: reminderDate,
+        payload: bill.id,
+      );
+      debugPrint('📅 Recordatorio programado para ${bill.id}');
+    }
+  }
+
   // 📝 Guardar factura (crear o actualizar)
   Future<void> _saveBill() async {
     if (!_formKey.currentState!.validate()) return;
@@ -182,8 +201,11 @@ class _AddBillScreenState extends State<AddBillScreen> {
 
     setState(() => _isLoading = false);
 
-    if (result != null && mounted) {
+    if (result != null) {
+      await _scheduleBillReminder(result);
+      if (!mounted) return;
       _showSuccess(_isEditing ? 'Factura actualizada' : 'Factura creada');
+      if (!mounted) return;
       Navigator.pop(context, true);
     } else if (mounted) {
       _showError('Error al ${_isEditing ? 'actualizar' : 'crear'} la factura');

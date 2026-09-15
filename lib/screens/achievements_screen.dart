@@ -30,9 +30,6 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
       final gamificationProvider = context.read<GamificationProvider>();
       // Mostrar indicador de carga al recargar para que el usuario vea actividad
       await gamificationProvider.loadGamification(userId, silent: false);
-      // refreshUi no es necesario ya que loadGamification notifica cuando silent=false
-      // pero lo dejamos para asegurar que la UI se actualiza
-      gamificationProvider.refreshUi();
       print('✅ AchievementsScreen: _loadData completed');
     } else {
       print('⚠️ AchievementsScreen: usuario nulo, no se cargan logros');

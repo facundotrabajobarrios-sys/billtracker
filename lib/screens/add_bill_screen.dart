@@ -245,10 +245,15 @@ class _AddBillScreenState extends State<AddBillScreen> {
         backgroundColor: Colors.green[700],
         foregroundColor: Colors.white,
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
+            tooltip: 'Recargar datos',
+          ),
           IconButton(
             icon: const Icon(Icons.save),
             onPressed: _isLoading ? null : _saveBill,
+            tooltip: 'Guardar factura',
           ),
         ],
       ),

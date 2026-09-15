@@ -200,7 +200,7 @@ class _BillsScreenState extends State<BillsScreen> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final result = await Navigator.push(
             context,
@@ -209,7 +209,8 @@ class _BillsScreenState extends State<BillsScreen> {
           if (result == true) _loadBills();
         },
         backgroundColor: Colors.green[700],
-        child: const Icon(Icons.add, color: Colors.white),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('Agregar factura'),
       ),
     );
   }

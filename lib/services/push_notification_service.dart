@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -19,6 +20,16 @@ class PushNotificationService {
   bool _isInitialized = false;
 
   Future<void> init({GlobalKey<NavigatorState>? navigatorKey}) async {
+    final isDesktop =
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux;
+    if (kIsWeb || isDesktop) {
+      _navigatorKey = navigatorKey ?? _navigatorKey;
+      _isInitialized = true;
+      return;
+    }
+
     if (_isInitialized) {
       _navigatorKey = navigatorKey ?? _navigatorKey;
       return;

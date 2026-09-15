@@ -7,6 +7,7 @@ import 'providers/gamification_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/reset_password_screen.dart';
+import 'screens/auth_callback_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/add_bill_screen.dart';
 import 'config/supabase_config.dart';
@@ -41,12 +42,14 @@ class MyApp extends StatelessWidget {
         builder: (context, authProvider, _) {
           if (authProvider.isLoading) {
             return const MaterialApp(
+              title: 'BillTracker',
               home: Scaffold(body: Center(child: CircularProgressIndicator())),
               debugShowCheckedModeBanner: false,
             );
           }
 
           final bool isAuth = authProvider.isAuthenticated;
+          final bool isAuthCallback = Uri.base.path.endsWith('/auth/callback');
 
           return MaterialApp(
             navigatorKey: navigatorKey,
@@ -57,11 +60,16 @@ class MyApp extends StatelessWidget {
               ),
               useMaterial3: true,
             ),
-            home: isAuth ? const HomeScreen() : const LoginScreen(),
+            home: isAuthCallback
+                ? const AuthCallbackScreen()
+                : isAuth
+                ? const HomeScreen()
+                : const LoginScreen(),
             routes: {
               '/login': (context) => const LoginScreen(),
               '/home': (context) => const HomeScreen(),
               '/reset-password': (context) => const ResetPasswordScreen(),
+              '/auth/callback': (context) => const AuthCallbackScreen(),
               '/notifications': (context) => const NotificationsScreen(),
               '/bill-detail': (context) {
                 final bill =
@@ -70,6 +78,11 @@ class MyApp extends StatelessWidget {
               },
             },
             onUnknownRoute: (settings) {
+              if (settings.name?.contains('/auth/callback') ?? false) {
+                return MaterialPageRoute(
+                  builder: (_) => const AuthCallbackScreen(),
+                );
+              }
               return MaterialPageRoute(builder: (_) => const LoginScreen());
             },
             debugShowCheckedModeBanner: false,

@@ -637,7 +637,11 @@ class _HomeContentState extends State<_HomeContent> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Gráfica simple (pie)
+                  const Text(
+                    'Facturas pendientes vs pagadas',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
                   Center(
                     child: SizedBox(
                       width: 220,
@@ -678,14 +682,18 @@ class _HomeContentState extends State<_HomeContent> {
 
                   const SizedBox(height: 12),
 
-                  // Gráficos mensuales: barras y líneas
                   const Text(
-                    'Gastos mensuales (últimos 6 meses)',
+                    'Evolución de pagos mensuales',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   SizedBox(height: 200, child: _buildMonthlyBarChart()),
                   const SizedBox(height: 12),
+                  const Text(
+                    'Tendencia del gasto mensual',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
                   SizedBox(height: 180, child: _buildMonthlyLineChart()),
 
                   const SizedBox(height: 20),

@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 import '../config/supabase_config.dart';
 import '../models/user.dart';
 
@@ -13,6 +14,14 @@ class AuthService {
   // ✅ Forma CORRECTA de obtener el cliente de Supabase
   supabase.SupabaseClient get _client => supabase.Supabase.instance.client;
 
+  String? get _webAuthRedirect {
+    if (!kIsWeb) return null;
+    final basePath = Uri.base.path.startsWith('/billtracker')
+        ? '/billtracker'
+        : '';
+    return '${Uri.base.origin}$basePath/auth/callback';
+  }
+
   // 📝 Registrar nuevo usuario
   Future<User?> register(String email, String password, String name) async {
     try {
@@ -20,6 +29,7 @@ class AuthService {
         email: email,
         password: password,
         data: {'name': name},
+        emailRedirectTo: _webAuthRedirect,
       );
 
       if (response.user != null) {
@@ -112,7 +122,10 @@ class AuthService {
   // 🔑 Recuperar contraseña
   Future<bool> resetPassword(String email) async {
     try {
-      await _client.auth.resetPasswordForEmail(email);
+      await _client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: _webAuthRedirect,
+      );
       return true;
     } catch (e) {
       print('❌ Error al enviar correo de recuperación: $e');

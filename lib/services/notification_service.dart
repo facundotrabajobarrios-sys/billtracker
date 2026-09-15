@@ -119,7 +119,7 @@ class NotificationService {
           .eq('user_id', resolvedUserId)
           .select();
 
-      final updatedCount = response is List ? response.length : 0;
+      final updatedCount = response.length;
       print('📝 Notificaciones marcadas como leídas: $updatedCount');
       return updatedCount > 0;
     } catch (e) {
@@ -174,7 +174,7 @@ class NotificationService {
           .eq('user_id', resolvedUserId)
           .select();
 
-      final deletedCount = response is List ? response.length : 0;
+      final deletedCount = response.length;
       print(
         '🗑️ Notificación eliminada: $notificationId (filas: $deletedCount)',
       );

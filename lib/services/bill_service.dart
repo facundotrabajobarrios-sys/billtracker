@@ -36,9 +36,9 @@ class BillService {
           .eq('user_id', userId)
           .order('due_date', ascending: true);
 
-      print('📊 Facturas obtenidas: ${response is List ? response.length : 0}');
+      print('📊 Facturas obtenidas: ${response.length}');
 
-      if (response != null && response is List) {
+      if (response is List) {
         return response.map((json) {
           print('📄 Factura: ${json['id']} - Servicio: ${json['services']}');
           return Bill.fromJson(json);
@@ -73,10 +73,8 @@ class BillService {
           .eq('id', billId)
           .single();
 
-      if (response != null) {
-        return Bill.fromJson(response);
-      }
-      return null;
+      return Bill.fromJson(response);
+          return null;
     } catch (e) {
       print('❌ Error al obtener factura por ID: $e');
       return null;
@@ -106,7 +104,7 @@ class BillService {
           .eq('status', status)
           .order('due_date', ascending: true);
 
-      if (response != null && response is List) {
+      if (response is List) {
         return response.map((json) => Bill.fromJson(json)).toList();
       }
       return [];
@@ -245,7 +243,7 @@ class BillService {
   Future<List<Map<String, dynamic>>> getServices() async {
     try {
       final response = await client.from('services').select();
-      if (response != null && response is List) {
+      if (response is List) {
         return List<Map<String, dynamic>>.from(response);
       }
       return [];
@@ -279,7 +277,7 @@ class BillService {
   Future<List<Map<String, dynamic>>> getCategories() async {
     try {
       final response = await client.from('categories').select();
-      if (response != null && response is List) {
+      if (response is List) {
         return List<Map<String, dynamic>>.from(response);
       }
       return [];

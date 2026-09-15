@@ -2,7 +2,6 @@ import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import '../models/gamification.dart';
 import '../models/bill.dart';
 import '../services/notification_service.dart';
-import '../config/supabase_config.dart';
 
 // 🏆 Servicio de Gamificación
 class GamificationService {

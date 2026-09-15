@@ -280,7 +280,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
                               border: OutlineInputBorder(),
                               prefixIcon: Icon(Icons.business),
                             ),
-                            value: _selectedServiceId,
+                            initialValue: _selectedServiceId,
                             items: _services
                                 .map(
                                   (s) => DropdownMenuItem<String>(
@@ -321,7 +321,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.category),
                       ),
-                      value: _selectedCategoryId,
+                      initialValue: _selectedCategoryId,
                       items: _categories
                           .map(
                             (c) => DropdownMenuItem<String>(
@@ -403,7 +403,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
                       subtitle: const Text('Se repite cada mes'),
                       value: _isRecurring,
                       onChanged: (v) => setState(() => _isRecurring = v),
-                      activeColor: Colors.green,
+                      activeThumbColor: Colors.green,
                     ),
 
                     // 🔔 Recordatorio
@@ -440,7 +440,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.info),
                       ),
-                      value: _selectedStatus,
+                      initialValue: _selectedStatus,
                       items: const [
                         DropdownMenuItem<String>(
                           // ✅ Especificar tipo

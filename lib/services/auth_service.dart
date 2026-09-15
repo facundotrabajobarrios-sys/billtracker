@@ -1,7 +1,10 @@
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:shared_preferences/shared_preferences.dart';
+<<<<<<< Updated upstream
 import 'package:flutter/foundation.dart';
 import '../config/supabase_config.dart';
+=======
+>>>>>>> Stashed changes
 import '../models/user.dart';
 
 // 🔐 Servicio de autenticación

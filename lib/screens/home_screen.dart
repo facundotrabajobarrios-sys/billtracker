@@ -203,8 +203,9 @@ class _HomeContentState extends State<_HomeContent> {
                   showTitles: true,
                   getTitlesWidget: (double value, TitleMeta meta) {
                     final index = value.toInt();
-                    if (index < 0 || index >= labels.length)
+                    if (index < 0 || index >= labels.length) {
                       return const SizedBox();
+                    }
                     return Text(
                       labels[index],
                       style: const TextStyle(fontSize: 10),
@@ -255,8 +256,9 @@ class _HomeContentState extends State<_HomeContent> {
                   showTitles: true,
                   getTitlesWidget: (double value, TitleMeta meta) {
                     final index = value.toInt();
-                    if (index < 0 || index >= labels.length)
+                    if (index < 0 || index >= labels.length) {
                       return const SizedBox();
+                    }
                     return Text(
                       labels[index],
                       style: const TextStyle(fontSize: 10),
@@ -298,8 +300,8 @@ class _HomeContentState extends State<_HomeContent> {
     buffer.writeln('id,service,category,due_date,amount,status');
     for (final b in bills) {
       final id = b.id;
-      final service = b.service?.name?.replaceAll(',', ' ') ?? '';
-      final category = b.category?.name?.replaceAll(',', ' ') ?? '';
+      final service = b.service?.name.replaceAll(',', ' ') ?? '';
+      final category = b.category?.name.replaceAll(',', ' ') ?? '';
       final due = DateFormat('yyyy-MM-dd').format(b.dueDate);
       final amount = b.amount.toStringAsFixed(2);
       final status = b.status;

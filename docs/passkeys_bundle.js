@@ -375,3 +375,5 @@ var PasskeyAuthenticator = (function (exports) {
     return exports;
 
 })({});
+
+window.PasskeyAuthenticator = PasskeyAuthenticator;

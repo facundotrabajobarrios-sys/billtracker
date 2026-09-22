@@ -31,6 +31,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
   String _selectedStatus = 'pending';
   bool _isRecurring = false;
   int _reminderDays = 3;
+  int _reminderTimeMinutes = 9 * 60;
   bool _isLoading = false;
   bool _isAddingService = false;
   bool _isEditing = false; // ✅ Bandera para saber si es edición
@@ -68,6 +69,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
     _selectedStatus = bill.status;
     _isRecurring = bill.isRecurring;
     _reminderDays = bill.reminderDays ?? 3;
+    _reminderTimeMinutes = bill.reminderTimeMinutes;
     if (bill.description != null) {
       _descriptionController.text = bill.description!;
     }
@@ -142,7 +144,15 @@ class _AddBillScreenState extends State<AddBillScreen> {
   Future<void> _scheduleBillReminder(Bill bill) async {
     final serviceName = bill.service?.name ?? 'Factura';
     final reminderDays = bill.reminderDays ?? 3;
-    final reminderDate = bill.dueDate.subtract(Duration(days: reminderDays));
+    final reminderDate = bill.dueDate
+        .subtract(Duration(days: reminderDays))
+        .copyWith(
+          hour: bill.reminderTimeMinutes ~/ 60,
+          minute: bill.reminderTimeMinutes % 60,
+          second: 0,
+          millisecond: 0,
+          microsecond: 0,
+        );
 
     if (reminderDate.isAfter(DateTime.now())) {
       final notificationId = PushNotificationService().generateId(bill.id);
@@ -192,6 +202,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
           : null,
       isRecurring: _isRecurring,
       reminderDays: _reminderDays,
+      reminderTimeMinutes: _reminderTimeMinutes,
     );
 
     // ✅ Guardar o actualizar
@@ -423,6 +434,48 @@ class _AddBillScreenState extends State<AddBillScreen> {
                             fontWeight: FontWeight.bold,
                             color: Colors.green,
                           ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(Icons.schedule),
+                        const SizedBox(width: 8),
+                        const Text('Hora del recordatorio:'),
+                        const SizedBox(width: 12),
+                        DropdownButton<int>(
+                          value: _reminderTimeMinutes ~/ 60,
+                          items: List.generate(
+                            24,
+                            (hour) => DropdownMenuItem(
+                              value: hour,
+                              child: Text(hour.toString().padLeft(2, '0')),
+                            ),
+                          ),
+                          onChanged: (hour) {
+                            if (hour != null) {
+                              setState(() => _reminderTimeMinutes =
+                                  hour * 60 + _reminderTimeMinutes % 60);
+                            }
+                          },
+                        ),
+                        const Text(':'),
+                        DropdownButton<int>(
+                          value: _reminderTimeMinutes % 60,
+                          items: List.generate(
+                            60,
+                            (minute) => DropdownMenuItem(
+                              value: minute,
+                              child: Text(minute.toString().padLeft(2, '0')),
+                            ),
+                          ),
+                          onChanged: (minute) {
+                            if (minute != null) {
+                              setState(() => _reminderTimeMinutes =
+                                  (_reminderTimeMinutes ~/ 60) * 60 + minute);
+                            }
+                          },
                         ),
                       ],
                     ),

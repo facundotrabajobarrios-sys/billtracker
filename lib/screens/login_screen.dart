@@ -4,6 +4,7 @@ import '../providers/auth_provider.dart';
 import 'register_screen.dart';
 import 'reset_password_screen.dart';
 import 'home_screen.dart';
+import '../utils/validators.dart';
 
 // 🔐 Pantalla de Login
 class LoginScreen extends StatefulWidget {
@@ -126,10 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       if (value == null || value.isEmpty) {
                         return 'Ingresa tu contraseña';
                       }
-                      if (value.length < 6) {
-                        return 'Mínimo 6 caracteres';
-                      }
-                      return null;
+                      return PasswordRules.validate(value);
                     },
                   ),
                   const SizedBox(height: 24),

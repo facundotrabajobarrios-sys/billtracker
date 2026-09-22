@@ -415,25 +415,6 @@ class _HomeContentState extends State<_HomeContent> {
     }
   }
 
-  Future<void> _sendTestNotification() async {
-    try {
-      await PushNotificationService().showImmediateNotification(
-        title: 'Prueba de BillTracker',
-        body: 'Esta notificación confirma que el sistema funciona.',
-        payload: 'test-notification',
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✅ Notificación de prueba enviada')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Error al enviar la prueba: $e')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
@@ -488,11 +469,6 @@ class _HomeContentState extends State<_HomeContent> {
                   ),
                 ),
             ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.notifications_active),
-            onPressed: _sendTestNotification,
-            tooltip: 'Probar notificación',
           ),
           IconButton(
             icon: const Icon(Icons.refresh),

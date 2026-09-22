@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../utils/validators.dart';
+import '../widgets/password_strength_indicator.dart';
 import '../providers/auth_provider.dart';
 import 'login_screen.dart';
 import 'home_screen.dart';
@@ -45,6 +47,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const HomeScreen()),
+        );
+      } else if (mounted && authProvider.registrationNeedsConfirmation) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Cuenta creada. Revisa tu correo y confirma el enlace antes de iniciar sesión.',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
         );
       } else if (mounted) {
         // ❌ Mostrar error
@@ -163,11 +178,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       if (value == null || value.isEmpty) {
                         return 'Ingresa tu contraseña';
                       }
-                      if (value.length < 6) {
-                        return 'Mínimo 6 caracteres';
-                      }
-                      return null;
+                      return PasswordRules.validate(value);
                     },
+                  ),
+                  const SizedBox(height: 8),
+                  ValueListenableBuilder(
+                    valueListenable: _passwordController,
+                    builder: (_, value, __) =>
+                        PasswordStrengthIndicator(password: value.text),
                   ),
                   const SizedBox(height: 16),
 

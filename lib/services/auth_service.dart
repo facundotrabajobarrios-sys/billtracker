@@ -12,6 +12,10 @@ class AuthService {
 
   // ✅ Forma CORRECTA de obtener el cliente de Supabase
   supabase.SupabaseClient get _client => supabase.Supabase.instance.client;
+  Stream<supabase.AuthState> get authStateChanges =>
+      _client.auth.onAuthStateChange;
+  bool get isCurrentUserEmailConfirmed =>
+      _client.auth.currentUser?.emailConfirmedAt != null;
 
   // 📝 Registrar nuevo usuario
   Future<User?> register(String email, String password, String name) async {
@@ -19,18 +23,11 @@ class AuthService {
       final response = await _client.auth.signUp(
         email: email,
         password: password,
+        emailRedirectTo: SupabaseConfig.authRedirectUri,
         data: {'name': name},
       );
 
       if (response.user != null) {
-        await _client.from('users').insert({
-          'id': response.user!.id,
-          'email': email,
-          'name': name,
-          'level': 0,
-          'points': 0,
-        });
-
         final user = User.fromJson({
           'id': response.user!.id,
           'email': email,
@@ -39,8 +36,12 @@ class AuthService {
           'points': 0,
         });
 
-        // ✅ Guardar sesión
-        await _saveSession(user);
+        // Supabase no crea una sesión hasta que el enlace de confirmación se
+        // consume. Nunca se debe tratar al usuario como autenticado antes.
+        if (response.session != null && response.user!.emailConfirmedAt != null) {
+          await _ensureProfile(response.user!, name: name);
+          await _saveSession(user);
+        }
         return user;
       }
       return null;
@@ -59,6 +60,11 @@ class AuthService {
       );
 
       if (response.user != null) {
+        if (response.user!.emailConfirmedAt == null) {
+          await _client.auth.signOut();
+          return null;
+        }
+        await _ensureProfile(response.user!);
         final userData = await _client
             .from('users')
             .select()
@@ -76,6 +82,28 @@ class AuthService {
       print('❌ Error en login: $e');
       return null;
     }
+
+  }
+
+  Future<void> _ensureProfile(
+    supabase.User authUser, {
+    String? name,
+  }) async {
+    final existing = await _client
+        .from('users')
+        .select('id')
+        .eq('id', authUser.id)
+        .maybeSingle();
+    if (existing != null) {
+      return;
+    }
+    await _client.from('users').insert({
+      'id': authUser.id,
+      'email': authUser.email,
+      'name': name ?? authUser.userMetadata?['name'] ?? 'Usuario',
+      'level': 0,
+      'points': 0,
+    });
   }
 
   // 🚪 Cerrar sesión
@@ -87,10 +115,10 @@ class AuthService {
 
   // 👤 Obtener usuario actual (primero de Supabase, luego de caché)
   Future<User?> getCurrentUser() async {
-    // 1️⃣ Intentar obtener sesión de Supabase
     final session = _client.auth.currentSession;
-    if (session != null) {
+    if (session != null && session.user.emailConfirmedAt != null) {
       try {
+        await _ensureProfile(session.user);
         final userData = await _client
             .from('users')
             .select()
@@ -100,24 +128,40 @@ class AuthService {
         await _saveSession(user);
         return user;
       } catch (e) {
-        // Si falla, intentar con caché
-        return await _getCachedUser();
+        print('❌ Error al cargar el perfil autenticado: $e');
+        return null;
       }
     }
 
-    // 2️⃣ Si no hay sesión en Supabase, buscar en caché
-    return await _getCachedUser();
+    // La caché nunca concede acceso: la sesión vigente de Supabase es la
+    // única fuente de autenticación y además debe estar confirmada.
+    return null;
   }
 
   // 🔑 Recuperar contraseña
   Future<bool> resetPassword(String email) async {
     try {
-      await _client.auth.resetPasswordForEmail(email);
+      await _client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: SupabaseConfig.authRedirectUri,
+      );
       return true;
     } catch (e) {
       print('❌ Error al enviar correo de recuperación: $e');
       return false;
     }
+
+  }
+
+  Future<void> updatePassword(String password) async {
+    await _client.auth.updateUser(
+      supabase.UserAttributes(password: password),
+    );
+  }
+
+  Future<void> deleteAccount() async {
+    await _client.functions.invoke('delete-account');
+    await logout();
   }
 
   // 💾 Guardar sesión en SharedPreferences
@@ -132,33 +176,6 @@ class AuthService {
       print('✅ Sesión guardada para: ${user.email}');
     } catch (e) {
       print('❌ Error al guardar sesión: $e');
-    }
-  }
-
-  // 📖 Obtener usuario de caché
-  Future<User?> _getCachedUser() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final id = prefs.getString('user_id');
-      final email = prefs.getString('user_email');
-      final name = prefs.getString('user_name');
-      final level = prefs.getInt('user_level') ?? 0;
-      final points = prefs.getInt('user_points') ?? 0;
-
-      if (id != null && email != null) {
-        print('✅ Usuario cargado de caché: $email');
-        return User(
-          id: id,
-          email: email,
-          name: name ?? 'Usuario',
-          level: level,
-          points: points,
-        );
-      }
-      return null;
-    } catch (e) {
-      print('❌ Error al cargar caché: $e');
-      return null;
     }
   }
 

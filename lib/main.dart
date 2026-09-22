@@ -19,6 +19,14 @@ import 'services/push_notification_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+Map<String, String> _webAuthParameters() {
+  final parameters = <String, String>{...Uri.base.queryParameters};
+  if (Uri.base.fragment.isNotEmpty) {
+    parameters.addAll(Uri.splitQueryString(Uri.base.fragment));
+  }
+  return parameters;
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -79,6 +87,8 @@ class MyApp extends StatelessWidget {
           final bool isAuth = authProvider.isAuthenticated;
           final bool isWebCallback =
               kIsWeb && Uri.base.path.endsWith('/auth/callback');
+          final bool isWebPasswordRecovery =
+              isWebCallback && _webAuthParameters()['type'] == 'recovery';
 
           return MaterialApp(
             navigatorKey: navigatorKey,
@@ -99,7 +109,7 @@ class MyApp extends StatelessWidget {
             themeMode: themeProvider.isDarkMode
                 ? ThemeMode.dark
                 : ThemeMode.light,
-            home: authProvider.isPasswordRecovery
+            home: authProvider.isPasswordRecovery || isWebPasswordRecovery
                 ? const UpdatePasswordScreen()
                 : isWebCallback
                 ? const AuthCallbackScreen()

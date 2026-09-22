@@ -19,6 +19,23 @@ import 'services/push_notification_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+Future<void> _exchangeWebAuthCode() async {
+  if (!kIsWeb ||
+      (!Uri.base.path.endsWith('/auth/callback') &&
+          !Uri.base.path.endsWith('/auth/reset-password')) ||
+      Uri.base.queryParameters['code'] == null) {
+    return;
+  }
+
+  try {
+    await Supabase.instance.client.auth.exchangeCodeForSession(
+      Uri.base.queryParameters['code']!,
+    );
+  } catch (error) {
+    debugPrint('Error procesando el enlace de recuperación: $error');
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -35,23 +52,6 @@ Future<void> main() async {
   if (supportsLocalNotifications) {
     await PushNotificationService().init(navigatorKey: navigatorKey);
     await _initAuthDeepLinks();
-  }
-
-  Future<void> _exchangeWebAuthCode() async {
-    if (!kIsWeb ||
-        (!Uri.base.path.endsWith('/auth/callback') &&
-            !Uri.base.path.endsWith('/auth/reset-password')) ||
-        Uri.base.queryParameters['code'] == null) {
-      return;
-    }
-
-    try {
-      await Supabase.instance.client.auth.exchangeCodeForSession(
-        Uri.base.queryParameters['code']!,
-      );
-    } catch (error) {
-      debugPrint('Error procesando el enlace de recuperación: $error');
-    }
   }
 
   runApp(const MyApp());

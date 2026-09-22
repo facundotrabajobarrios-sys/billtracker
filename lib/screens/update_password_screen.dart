@@ -16,6 +16,8 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
   final _passwordController = TextEditingController();
   final _confirmationController = TextEditingController();
   bool _isLoading = false;
+  bool _showPassword = false;
+  bool _showConfirmation = false;
 
   @override
   void dispose() {
@@ -29,8 +31,8 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
     setState(() => _isLoading = true);
     try {
       await context.read<AuthProvider>().updatePassword(
-            _passwordController.text,
-          );
+        _passwordController.text,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Contraseña actualizada correctamente')),
@@ -62,10 +64,18 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
                 const SizedBox(height: 24),
                 TextFormField(
                   controller: _passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
+                  obscureText: !_showPassword,
+                  decoration: InputDecoration(
                     labelText: 'Nueva contraseña',
                     border: OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      tooltip: 'Mostrar contraseña',
+                      icon: Icon(
+                        _showPassword ? Icons.visibility_off : Icons.visibility,
+                      ),
+                      onPressed: () =>
+                          setState(() => _showPassword = !_showPassword),
+                    ),
                   ),
                   validator: PasswordRules.validate,
                 ),
@@ -78,10 +88,21 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _confirmationController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
+                  obscureText: !_showConfirmation,
+                  decoration: InputDecoration(
                     labelText: 'Confirmar contraseña',
                     border: OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      tooltip: 'Mostrar confirmación',
+                      icon: Icon(
+                        _showConfirmation
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                      ),
+                      onPressed: () => setState(
+                        () => _showConfirmation = !_showConfirmation,
+                      ),
+                    ),
                   ),
                   validator: (value) => value == _passwordController.text
                       ? null

@@ -5,10 +5,14 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 const apiKey = Deno.env.get("RESEND_API_KEY")!;
-const sender = Deno.env.get("MAIL_FROM") ?? "BillTracker <onboarding@resend.dev>";
+const sender = Deno.env.get("MAIL_FROM") ??
+  "BillTracker <onboarding@resend.dev>";
 
 Deno.serve(async (request) => {
-  if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+  if (request.method !== "POST") {
+    return new Response("Method not allowed", { status: 405 });
+  }
+
   const now = new Date();
   const horizon = new Date(now);
   horizon.setDate(horizon.getDate() + 10);
@@ -27,28 +31,83 @@ Deno.serve(async (request) => {
     reminder.setDate(reminder.getDate() - (bill.reminder_days ?? 3));
     const minutes = bill.reminder_time_minutes ?? 540;
     reminder.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
-    if (Math.abs(now.getTime() - reminder.getTime()) > 30 * 60 * 1000) continue;
+    if (Math.abs(now.getTime() - reminder.getTime()) > 30 * 60 * 1000) {
+      continue;
+    }
+
+    const reminderAt = reminder.toISOString();
+    const { data: delivery, error: deliveryError } = await supabase
+      .from("bill_reminder_deliveries")
+      .upsert(
+        { bill_id: bill.id, reminder_at: reminderAt },
+        { onConflict: "bill_id,reminder_at", ignoreDuplicates: true },
+      )
+      .select("email_sent_at,notification_created_at")
+      .maybeSingle();
+    if (deliveryError) {
+      return Response.json({ error: deliveryError.message }, { status: 500 });
+    }
+    if (!delivery ||
+        (delivery.email_sent_at && delivery.notification_created_at)) {
+      continue;
+    }
 
     const { data: preferences } = await supabase
       .from("notification_preferences")
       .select("email_enabled,due_date_reminders")
       .eq("user_id", bill.user_id)
       .maybeSingle();
-    if (preferences && (!preferences.email_enabled || !preferences.due_date_reminders)) continue;
-    const { data: authUser } = await supabase.auth.admin.getUserById(bill.user_id);
-    if (!authUser.user?.email) continue;
+    const emailEnabled = preferences == null ||
+      (preferences.email_enabled == true &&
+        preferences.due_date_reminders == true);
 
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: sender,
-        to: [authUser.user.email],
-        subject: "Recordatorio de vencimiento - BillTracker",
-        html: `<p>Tu factura vence el ${due.toLocaleDateString("es-PY")}.</p>`,
-      }),
-    });
-    if (response.ok) sent++;
+    if (emailEnabled) {
+      const { data: authUser } =
+        await supabase.auth.admin.getUserById(bill.user_id);
+      if (authUser.user?.email) {
+        const response = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: sender,
+            to: [authUser.user.email],
+            subject: "Recordatorio de vencimiento - BillTracker",
+            html: `<p>Tu factura vence el ${due.toLocaleDateString("es-PY")}.</p>`,
+          }),
+        });
+        if (response.ok) {
+          await supabase
+            .from("bill_reminder_deliveries")
+            .update({ email_sent_at: now.toISOString() })
+            .eq("bill_id", bill.id)
+            .eq("reminder_at", reminderAt);
+          sent++;
+        }
+      }
+    }
+
+    const { error: notificationError } = await supabase
+      .from("notifications")
+      .insert({
+        user_id: bill.user_id,
+        bill_id: bill.id,
+        title: "Recordatorio de pago",
+        message: `Tu factura vence el ${due.toLocaleDateString("es-PY")}.`,
+        type: "reminder",
+        scheduled_at: reminderAt,
+        sent_at: now.toISOString(),
+      });
+    if (!notificationError) {
+      await supabase
+        .from("bill_reminder_deliveries")
+        .update({ notification_created_at: now.toISOString() })
+        .eq("bill_id", bill.id)
+        .eq("reminder_at", reminderAt);
+    }
   }
+
   return Response.json({ sent });
 });

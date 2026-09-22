@@ -12,6 +12,16 @@ create table if not exists public.notification_preferences (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.bill_reminder_deliveries (
+  bill_id uuid not null references public.bills(id) on delete cascade,
+  reminder_at timestamptz not null,
+  email_sent_at timestamptz,
+  notification_created_at timestamptz,
+  primary key (bill_id, reminder_at)
+);
+
+alter table public.bill_reminder_deliveries enable row level security;
+
 alter table public.notification_preferences enable row level security;
 
 create policy "Users can read their notification preferences"

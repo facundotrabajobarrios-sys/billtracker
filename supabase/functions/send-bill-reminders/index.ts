@@ -78,15 +78,32 @@ Deno.serve(async (request) => {
             html: `<p>Tu factura vence el ${due.toLocaleDateString("es-PY")}.</p>`,
           }),
         });
-        if (response.ok) {
-          await supabase
-            .from("bill_reminder_deliveries")
-            .update({ email_sent_at: now.toISOString() })
-            .eq("bill_id", bill.id)
-            .eq("reminder_at", reminderAt);
-          sent++;
+        if (!response.ok) {
+          const details = await response.text();
+          return Response.json(
+            { error: `Resend: ${details}` },
+            { status: 502 },
+          );
         }
+        await supabase
+          .from("bill_reminder_deliveries")
+          .update({ email_sent_at: now.toISOString() })
+          .eq("bill_id", bill.id)
+          .eq("reminder_at", reminderAt);
+        sent++;
+      } else {
+        await supabase
+          .from("bill_reminder_deliveries")
+          .update({ email_sent_at: now.toISOString() })
+          .eq("bill_id", bill.id)
+          .eq("reminder_at", reminderAt);
       }
+    } else {
+      await supabase
+        .from("bill_reminder_deliveries")
+        .update({ email_sent_at: now.toISOString() })
+        .eq("bill_id", bill.id)
+        .eq("reminder_at", reminderAt);
     }
 
     const { error: notificationError } = await supabase
@@ -100,13 +117,17 @@ Deno.serve(async (request) => {
         scheduled_at: reminderAt,
         sent_at: now.toISOString(),
       });
-    if (!notificationError) {
-      await supabase
-        .from("bill_reminder_deliveries")
-        .update({ notification_created_at: now.toISOString() })
-        .eq("bill_id", bill.id)
-        .eq("reminder_at", reminderAt);
+    if (notificationError) {
+      return Response.json(
+        { error: notificationError.message },
+        { status: 500 },
+      );
     }
+    await supabase
+      .from("bill_reminder_deliveries")
+      .update({ notification_created_at: now.toISOString() })
+      .eq("bill_id", bill.id)
+      .eq("reminder_at", reminderAt);
   }
 
   return Response.json({ sent });

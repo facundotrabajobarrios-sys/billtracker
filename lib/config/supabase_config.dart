@@ -11,6 +11,8 @@ class SupabaseConfig {
 
   static const String webCallbackUri =
       'https://facundotrabajobarrios-sys.github.io/billtracker/auth/callback';
+  static const String webPasswordRecoveryUri =
+      'https://facundotrabajobarrios-sys.github.io/billtracker/auth/reset-password';
   static const String mobileCallbackUri = 'miapp://auth-callback';
   static const String localDevelopmentUri = 'http://localhost:3000';
 

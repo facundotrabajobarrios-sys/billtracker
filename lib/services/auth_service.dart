@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/supabase_config.dart';
@@ -143,7 +144,9 @@ class AuthService {
     try {
       await _client.auth.resetPasswordForEmail(
         email,
-        redirectTo: SupabaseConfig.authRedirectUri,
+        redirectTo: kIsWeb
+            ? SupabaseConfig.webPasswordRecoveryUri
+            : SupabaseConfig.mobileCallbackUri,
       );
       return true;
     } catch (e) {

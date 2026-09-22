@@ -19,14 +19,6 @@ import 'services/push_notification_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-Map<String, String> _webAuthParameters() {
-  final parameters = <String, String>{...Uri.base.queryParameters};
-  if (Uri.base.fragment.isNotEmpty) {
-    parameters.addAll(Uri.splitQueryString(Uri.base.fragment));
-  }
-  return parameters;
-}
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -34,6 +26,7 @@ Future<void> main() async {
     url: SupabaseConfig.url,
     anonKey: SupabaseConfig.anonKey,
   );
+  await _exchangeWebAuthCode();
 
   final supportsLocalNotifications =
       !kIsWeb &&
@@ -42,6 +35,23 @@ Future<void> main() async {
   if (supportsLocalNotifications) {
     await PushNotificationService().init(navigatorKey: navigatorKey);
     await _initAuthDeepLinks();
+  }
+
+  Future<void> _exchangeWebAuthCode() async {
+    if (!kIsWeb ||
+        (!Uri.base.path.endsWith('/auth/callback') &&
+            !Uri.base.path.endsWith('/auth/reset-password')) ||
+        Uri.base.queryParameters['code'] == null) {
+      return;
+    }
+
+    try {
+      await Supabase.instance.client.auth.exchangeCodeForSession(
+        Uri.base.queryParameters['code']!,
+      );
+    } catch (error) {
+      debugPrint('Error procesando el enlace de recuperación: $error');
+    }
   }
 
   runApp(const MyApp());
@@ -88,7 +98,7 @@ class MyApp extends StatelessWidget {
           final bool isWebCallback =
               kIsWeb && Uri.base.path.endsWith('/auth/callback');
           final bool isWebPasswordRecovery =
-              isWebCallback && _webAuthParameters()['type'] == 'recovery';
+              kIsWeb && Uri.base.path.endsWith('/auth/reset-password');
 
           return MaterialApp(
             navigatorKey: navigatorKey,

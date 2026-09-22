@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
 import '../providers/auth_provider.dart';
 import '../services/bill_service.dart';
 import '../services/push_notification_service.dart';
@@ -22,6 +23,8 @@ class _AddBillScreenState extends State<AddBillScreen> {
   // 🔤 Controladores
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _reminderHourController = TextEditingController(text: '09');
+  final _reminderMinuteController = TextEditingController(text: '00');
   // 🏢 Controlador para nuevo servicio
   final _newServiceController = TextEditingController();
   // 📅 Variables
@@ -56,6 +59,8 @@ class _AddBillScreenState extends State<AddBillScreen> {
     _amountController.dispose();
     _descriptionController.dispose();
     _newServiceController.dispose();
+    _reminderHourController.dispose();
+    _reminderMinuteController.dispose();
     super.dispose();
   }
 
@@ -70,8 +75,26 @@ class _AddBillScreenState extends State<AddBillScreen> {
     _isRecurring = bill.isRecurring;
     _reminderDays = bill.reminderDays ?? 3;
     _reminderTimeMinutes = bill.reminderTimeMinutes;
+    _setReminderTimeFields();
     if (bill.description != null) {
       _descriptionController.text = bill.description!;
+    }
+  }
+
+  void _setReminderTimeFields() {
+    _reminderHourController.text = (_reminderTimeMinutes ~/ 60)
+        .toString()
+        .padLeft(2, '0');
+    _reminderMinuteController.text = (_reminderTimeMinutes % 60)
+        .toString()
+        .padLeft(2, '0');
+  }
+
+  void _updateReminderTime() {
+    final hour = int.tryParse(_reminderHourController.text);
+    final minute = int.tryParse(_reminderMinuteController.text);
+    if (hour != null && minute != null && hour <= 23 && minute <= 59) {
+      _reminderTimeMinutes = hour * 60 + minute;
     }
   }
 
@@ -447,40 +470,59 @@ class _AddBillScreenState extends State<AddBillScreen> {
                       children: [
                         const Icon(Icons.schedule),
                         const SizedBox(width: 8),
-                        const Text('Hora del recordatorio:'),
-                        const SizedBox(width: 12),
-                        DropdownButton<int>(
-                          value: _reminderTimeMinutes ~/ 60,
-                          items: List.generate(
-                            24,
-                            (hour) => DropdownMenuItem(
-                              value: hour,
-                              child: Text(hour.toString().padLeft(2, '0')),
+                        const Text('Hora:'),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 64,
+                          child: TextFormField(
+                            controller: _reminderHourController,
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            maxLength: 2,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            decoration: const InputDecoration(
+                              hintText: '00',
+                              counterText: '',
+                              border: OutlineInputBorder(),
                             ),
+                            validator: (value) {
+                              final hour = int.tryParse(value ?? '');
+                              return hour == null || hour > 23 ? '00-23' : null;
+                            },
+                            onChanged: (_) => _updateReminderTime(),
                           ),
-                          onChanged: (hour) {
-                            if (hour != null) {
-                              setState(() => _reminderTimeMinutes =
-                                  hour * 60 + _reminderTimeMinutes % 60);
-                            }
-                          },
                         ),
-                        const Text(':'),
-                        DropdownButton<int>(
-                          value: _reminderTimeMinutes % 60,
-                          items: List.generate(
-                            60,
-                            (minute) => DropdownMenuItem(
-                              value: minute,
-                              child: Text(minute.toString().padLeft(2, '0')),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 6),
+                          child: Text(':'),
+                        ),
+                        const Text('Min:'),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 64,
+                          child: TextFormField(
+                            controller: _reminderMinuteController,
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            maxLength: 2,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            decoration: const InputDecoration(
+                              hintText: '00',
+                              counterText: '',
+                              border: OutlineInputBorder(),
                             ),
+                            validator: (value) {
+                              final minute = int.tryParse(value ?? '');
+                              return minute == null || minute > 59
+                                  ? '00-59'
+                                  : null;
+                            },
+                            onChanged: (_) => _updateReminderTime(),
                           ),
-                          onChanged: (minute) {
-                            if (minute != null) {
-                              setState(() => _reminderTimeMinutes =
-                                  (_reminderTimeMinutes ~/ 60) * 60 + minute);
-                            }
-                          },
                         ),
                       ],
                     ),

@@ -52,23 +52,32 @@ Deno.serve(async (request) => {
       continue;
     }
 
-    const { data: preferences } = await supabase
+    const { data: preferences, error: preferencesError } = await supabase
       .from("notification_preferences")
       .select("email_enabled,due_date_reminders")
       .eq("user_id", bill.user_id)
       .maybeSingle();
+    if (preferencesError) {
+      return Response.json(
+        { error: preferencesError.message },
+        { status: 500 },
+      );
+    }
     const emailEnabled = preferences == null ||
       (preferences.email_enabled == true &&
         preferences.due_date_reminders == true);
 
     if (emailEnabled) {
-      const { data: authUser } =
+      const { data: authUser, error: userError } =
         await supabase.auth.admin.getUserById(bill.user_id);
+      if (userError) {
+        return Response.json({ error: userError.message }, { status: 500 });
+      }
       if (authUser.user?.email) {
         const response = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${apiKey}`,
+            "Authorization": `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({

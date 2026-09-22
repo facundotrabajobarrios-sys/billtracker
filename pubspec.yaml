@@ -34,6 +34,7 @@ dependencies:
   # Agregaremos estas dependencias después
   #supabase_flutter: ^2.15.0
   supabase_flutter: ^2.15.0
+  uni_links: ^0.5.1
   #estado 
   provider: ^6.1.5+1
   #validación de email

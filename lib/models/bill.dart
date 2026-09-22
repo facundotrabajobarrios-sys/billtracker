@@ -18,6 +18,7 @@ class Bill {
   final String? description;
   final bool isRecurring;
   final int? reminderDays;
+  final int reminderTimeMinutes;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -39,6 +40,7 @@ class Bill {
     this.description,
     this.isRecurring = false,
     this.reminderDays = 3,
+    this.reminderTimeMinutes = 9 * 60,
     this.createdAt,
     this.updatedAt,
     this.service,
@@ -65,6 +67,7 @@ class Bill {
       description: json['description'],
       isRecurring: json['is_recurring'] ?? false,
       reminderDays: json['reminder_days'] ?? 3,
+      reminderTimeMinutes: json['reminder_time_minutes'] ?? 9 * 60,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : null,
@@ -97,6 +100,7 @@ class Bill {
       'description': description,
       'is_recurring': isRecurring,
       'reminder_days': reminderDays,
+      'reminder_time_minutes': reminderTimeMinutes,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
     };

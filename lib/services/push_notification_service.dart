@@ -18,18 +18,15 @@ class PushNotificationService {
   GlobalKey<NavigatorState>? _navigatorKey;
   String? _pendingPayload;
   bool _isInitialized = false;
+  bool get _isSupportedPlatform =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   Future<void> init({GlobalKey<NavigatorState>? navigatorKey}) async {
-    final isDesktop =
-        defaultTargetPlatform == TargetPlatform.windows ||
-        defaultTargetPlatform == TargetPlatform.macOS ||
-        defaultTargetPlatform == TargetPlatform.linux;
-    if (kIsWeb || isDesktop) {
-      _navigatorKey = navigatorKey ?? _navigatorKey;
-      _isInitialized = true;
+    if (!_isSupportedPlatform) {
       return;
     }
-
     if (_isInitialized) {
       _navigatorKey = navigatorKey ?? _navigatorKey;
       return;
@@ -61,12 +58,6 @@ class PushNotificationService {
 
     await _requestPermissions();
 
-    final appLaunchDetails = await _notifications
-        .getNotificationAppLaunchDetails();
-    if (appLaunchDetails?.didNotificationLaunchApp == true) {
-      _pendingPayload = appLaunchDetails!.notificationResponse?.payload;
-    }
-
     _isInitialized = true;
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _handlePendingPayload(),
@@ -94,6 +85,9 @@ class PushNotificationService {
     required DateTime scheduledDate,
     String? payload,
   }) async {
+    if (!_isSupportedPlatform) {
+      return;
+    }
     const androidChannel = AndroidNotificationDetails(
       'billtracker_channel',
       'BillTracker',
@@ -127,6 +121,9 @@ class PushNotificationService {
     required String body,
     String? payload,
   }) async {
+    if (!_isSupportedPlatform) {
+      return;
+    }
     const androidChannel = AndroidNotificationDetails(
       'billtracker_channel',
       'BillTracker',
@@ -152,14 +149,23 @@ class PushNotificationService {
   }
 
   Future<void> cancelNotification(int id) async {
+    if (!_isSupportedPlatform) {
+      return;
+    }
     await _notifications.cancel(id);
   }
 
   Future<void> cancelAllNotifications() async {
+    if (!_isSupportedPlatform) {
+      return;
+    }
     await _notifications.cancelAll();
   }
 
   Future<List<PendingNotificationRequest>> getPendingNotifications() async {
+    if (!_isSupportedPlatform) {
+      return [];
+    }
     return _notifications.pendingNotificationRequests();
   }
 

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import '../models/user.dart';
 import '../services/auth_service.dart';
 
@@ -7,10 +10,32 @@ class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
   User? _user;
   bool _isLoading = false;
+  bool _registrationNeedsConfirmation = false;
+  bool _isPasswordRecovery = false;
+  late final StreamSubscription _authSubscription;
+
+  AuthProvider() {
+    _authSubscription = _authService.authStateChanges.listen((state) async {
+      if (state.event == supabase.AuthChangeEvent.passwordRecovery) {
+        _isPasswordRecovery = true;
+        _user = null;
+        notifyListeners();
+        return;
+      }
+      if (_authService.isCurrentUserEmailConfirmed) {
+        await loadUser();
+      } else {
+        _user = null;
+        notifyListeners();
+      }
+    });
+  }
 
   User? get user => _user;
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _user != null;
+  bool get registrationNeedsConfirmation => _registrationNeedsConfirmation;
+  bool get isPasswordRecovery => _isPasswordRecovery;
 
   // 🔐 Iniciar sesión
   Future<bool> login(String email, String password) async {
@@ -44,10 +69,12 @@ class AuthProvider extends ChangeNotifier {
     try {
       final user = await _authService.register(email, password, name);
       if (user != null) {
-        _user = user;
+        _registrationNeedsConfirmation =
+            !_authService.isCurrentUserEmailConfirmed;
+        _user = _registrationNeedsConfirmation ? null : user;
         _isLoading = false;
         notifyListeners();
-        return true;
+        return !_registrationNeedsConfirmation;
       }
       _isLoading = false;
       notifyListeners();
@@ -65,6 +92,24 @@ class AuthProvider extends ChangeNotifier {
     await _authService.logout();
     _user = null;
     notifyListeners();
+  }
+
+  Future<void> updatePassword(String password) async {
+    await _authService.updatePassword(password);
+    _isPasswordRecovery = false;
+    await logout();
+  }
+
+  Future<void> deleteAccount() async {
+    await _authService.deleteAccount();
+    _user = null;
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _authSubscription.cancel();
+    super.dispose();
   }
 
   // 🔄 Cargar usuario actual (desde caché o Supabase)

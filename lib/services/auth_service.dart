@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/supabase_config.dart';
 import '../models/user.dart';
+import 'audit_log_service.dart';
 
 // 🔐 Servicio de autenticación
 class AuthService {
@@ -39,9 +40,11 @@ class AuthService {
 
         // Supabase no crea una sesión hasta que el enlace de confirmación se
         // consume. Nunca se debe tratar al usuario como autenticado antes.
-        if (response.session != null && response.user!.emailConfirmedAt != null) {
+        if (response.session != null &&
+            response.user!.emailConfirmedAt != null) {
           await _ensureProfile(response.user!, name: name);
           await _saveSession(user);
+          await AuditLogService().record('register');
         }
         return user;
       }
@@ -76,6 +79,7 @@ class AuthService {
 
         // ✅ Guardar sesión
         await _saveSession(user);
+        await AuditLogService().record('login');
         return user;
       }
       return null;
@@ -83,13 +87,9 @@ class AuthService {
       print('❌ Error en login: $e');
       return null;
     }
-
   }
 
-  Future<void> _ensureProfile(
-    supabase.User authUser, {
-    String? name,
-  }) async {
+  Future<void> _ensureProfile(supabase.User authUser, {String? name}) async {
     final existing = await _client
         .from('users')
         .select('id')
@@ -109,6 +109,7 @@ class AuthService {
 
   // 🚪 Cerrar sesión
   Future<void> logout() async {
+    await AuditLogService().record('logout');
     await _client.auth.signOut();
     // ✅ Eliminar sesión guardada
     await _clearSession();
@@ -148,21 +149,22 @@ class AuthService {
             ? SupabaseConfig.webPasswordRecoveryUri
             : SupabaseConfig.mobileCallbackUri,
       );
+      // This action is intentionally not logged here because no authenticated
+      // user exists when a password reset is requested.
       return true;
     } catch (e) {
       print('❌ Error al enviar correo de recuperación: $e');
       return false;
     }
-
   }
 
   Future<void> updatePassword(String password) async {
-    await _client.auth.updateUser(
-      supabase.UserAttributes(password: password),
-    );
+    await _client.auth.updateUser(supabase.UserAttributes(password: password));
+    await AuditLogService().record('password_changed');
   }
 
   Future<void> deleteAccount() async {
+    await AuditLogService().record('account_deleted');
     await _client.functions.invoke('delete-account');
     await logout();
   }

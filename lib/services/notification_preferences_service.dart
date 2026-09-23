@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'audit_log_service.dart';
 
 class NotificationPreferencesService {
   SupabaseClient get _client => Supabase.instance.client;
@@ -25,5 +26,9 @@ class NotificationPreferencesService {
       ...values,
       'updated_at': DateTime.now().toIso8601String(),
     });
+    await AuditLogService().record(
+      'notification_preferences_updated',
+      entityType: 'notification_preferences',
+    );
   }
 }

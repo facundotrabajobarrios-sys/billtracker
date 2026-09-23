@@ -95,9 +95,19 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> updatePassword(String password) async {
-    await _authService.updatePassword(password);
-    _isPasswordRecovery = false;
-    await logout();
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      await _authService.updatePassword(password);
+      _isPasswordRecovery = false;
+
+      // Keep the recovery session active and refresh the application profile.
+      await loadUser();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> deleteAccount() async {

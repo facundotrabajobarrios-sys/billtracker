@@ -119,7 +119,8 @@ class MyApp extends StatelessWidget {
             themeMode: themeProvider.isDarkMode
                 ? ThemeMode.dark
                 : ThemeMode.light,
-            home: authProvider.isPasswordRecovery || isWebPasswordRecovery
+            home: authProvider.isPasswordRecovery ||
+                    (isWebPasswordRecovery && !isAuth)
                 ? const UpdatePasswordScreen()
                 : isWebCallback
                 ? const AuthCallbackScreen()

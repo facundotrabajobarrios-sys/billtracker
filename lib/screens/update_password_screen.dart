@@ -37,6 +37,11 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Contraseña actualizada correctamente')),
       );
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      if (!mounted) return;
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil('/home', (route) => false);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

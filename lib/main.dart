@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:uni_links/uni_links.dart';
+import 'package:app_links/app_links.dart';
 import 'models/bill.dart';
 import 'providers/auth_provider.dart';
 import 'providers/gamification_provider.dart';
@@ -65,8 +65,9 @@ Future<void> _initAuthDeepLinks() async {
     );
   }
 
-  await getInitialUri().then(exchange);
-  uriLinkStream.listen(
+  final appLinks = AppLinks();
+  await appLinks.getInitialLink().then(exchange);
+  appLinks.uriLinkStream.listen(
     exchange,
     onError: (Object error) {
       debugPrint('Error leyendo deep link de autenticación: $error');

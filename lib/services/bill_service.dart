@@ -1,7 +1,7 @@
 import 'gamification_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import '../models/bill.dart';
-import '../config/supabase_config.dart';
+import 'audit_log_service.dart';
 
 // 📄 Servicio de facturas (CRUD)
 class BillService {
@@ -54,6 +54,8 @@ class BillService {
   // 📥 Obtener una factura por ID
   Future<Bill?> getBillById(String billId) async {
     try {
+      final userId = client.auth.currentUser?.id;
+      if (userId == null) return null;
       final response = await client
           .from('bills')
           .select('''
@@ -71,10 +73,11 @@ class BillService {
              )
            ''')
           .eq('id', billId)
+          .eq('user_id', userId)
           .single();
 
       return Bill.fromJson(response);
-          return null;
+      return null;
     } catch (e) {
       print('❌ Error al obtener factura por ID: $e');
       return null;
@@ -117,6 +120,8 @@ class BillService {
   // 📝 Crear una factura
   Future<Bill?> createBill(Bill bill) async {
     try {
+      final userId = client.auth.currentUser?.id;
+      if (userId == null || bill.userId != userId) return null;
       final response = await client.from('bills').insert(bill.toJson()).select(
         '''
             *,
@@ -134,7 +139,13 @@ class BillService {
           ''',
       ).single();
 
-      return Bill.fromJson(response);
+      final created = Bill.fromJson(response);
+      await AuditLogService().record(
+        'bill_created',
+        entityType: 'bill',
+        entityId: created.id,
+      );
+      return created;
     } catch (e) {
       print('❌ Error al crear factura: $e');
       return null;
@@ -144,10 +155,13 @@ class BillService {
   // ✏️ Actualizar una factura
   Future<Bill?> updateBill(Bill bill) async {
     try {
+      final userId = client.auth.currentUser?.id;
+      if (userId == null || bill.userId != userId) return null;
       final response = await client
           .from('bills')
           .update(bill.toJson())
           .eq('id', bill.id)
+          .eq('user_id', userId)
           .select('''
             *,
             services (
@@ -164,7 +178,13 @@ class BillService {
           ''')
           .single();
 
-      return Bill.fromJson(response);
+      final updated = Bill.fromJson(response);
+      await AuditLogService().record(
+        'bill_updated',
+        entityType: 'bill',
+        entityId: updated.id,
+      );
+      return updated;
     } catch (e) {
       print('❌ Error al actualizar factura: $e');
       return null;
@@ -174,7 +194,20 @@ class BillService {
   // 🗑️ Eliminar una factura
   Future<bool> deleteBill(String billId) async {
     try {
-      await client.from('bills').delete().eq('id', billId);
+      final userId = client.auth.currentUser?.id;
+      if (userId == null) return false;
+      final deleted = await client
+          .from('bills')
+          .delete()
+          .eq('id', billId)
+          .eq('user_id', userId)
+          .select('id');
+      if (deleted.isEmpty) return false;
+      await AuditLogService().record(
+        'bill_deleted',
+        entityType: 'bill',
+        entityId: billId,
+      );
       return true;
     } catch (e) {
       print('❌ Error al eliminar factura: $e');
@@ -185,6 +218,8 @@ class BillService {
   // ✅ Marcar factura como pagada
   Future<Bill?> markAsPaid(String billId) async {
     try {
+      final userId = client.auth.currentUser?.id;
+      if (userId == null) return null;
       final response = await client
           .from('bills')
           .update({
@@ -192,6 +227,7 @@ class BillService {
             'paid_date': DateTime.now().toIso8601String(),
           })
           .eq('id', billId)
+          .eq('user_id', userId)
           .select('''
             *,
             services (
@@ -208,7 +244,13 @@ class BillService {
           ''')
           .single();
 
-      return Bill.fromJson(response);
+      final paid = Bill.fromJson(response);
+      await AuditLogService().record(
+        'bill_marked_paid',
+        entityType: 'bill',
+        entityId: paid.id,
+      );
+      return paid;
     } catch (e) {
       print('❌ Error al marcar como pagada: $e');
       return null;

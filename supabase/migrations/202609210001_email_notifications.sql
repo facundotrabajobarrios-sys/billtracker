@@ -24,13 +24,22 @@ alter table public.bill_reminder_deliveries enable row level security;
 
 alter table public.notification_preferences enable row level security;
 
+drop policy if exists "Users can read their notification preferences"
+  on public.notification_preferences;
+
 create policy "Users can read their notification preferences"
   on public.notification_preferences for select
   using (auth.uid() = user_id);
 
+drop policy if exists "Users can insert their notification preferences"
+  on public.notification_preferences;
+
 create policy "Users can insert their notification preferences"
   on public.notification_preferences for insert
   with check (auth.uid() = user_id);
+
+drop policy if exists "Users can update their notification preferences"
+  on public.notification_preferences;
 
 create policy "Users can update their notification preferences"
   on public.notification_preferences for update

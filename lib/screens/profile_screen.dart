@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../providers/auth_provider.dart';
 import '../providers/gamification_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/bill_service.dart';
-import '../services/notification_preferences_service.dart';
 import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -17,11 +15,8 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _billService = BillService();
-  final _preferencesService = NotificationPreferencesService();
   int _totalBills = 0;
   bool _isLoading = true;
-  Map<String, bool> _preferences = {};
-  String? _preferencesError;
   String? _loadError;
 
   @override
@@ -40,53 +35,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         await context.read<GamificationProvider>().loadGamification(userId);
         final summary = await _billService.getSummary(userId);
         _totalBills = summary['total'] ?? 0;
-        _preferencesError = null;
-        final preferences = await _preferencesService.getForUser(userId);
-        _preferences = _booleanPreferences(preferences);
-      }
-    } on PostgrestException catch (error) {
-      if (error.code == 'PGRST205') {
-        _preferences = _defaultPreferences();
-        _preferencesError =
-            'Las preferencias de correo aún no están disponibles. '
-            'Aplica la migración de Supabase para activarlas.';
-      } else {
-        _loadError = 'No se pudo cargar el perfil: ${error.message}';
       }
     } catch (error) {
       _loadError = 'No se pudo cargar el perfil: $error';
     }
     if (!mounted) return;
     setState(() => _isLoading = false);
-    final message = _loadError ?? _preferencesError;
-    if (message != null) {
+    if (_loadError != null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      ).showSnackBar(SnackBar(content: Text(_loadError!)));
     }
   }
-
-  Map<String, bool> _booleanPreferences(Map<String, dynamic> values) {
-    final defaults = _defaultPreferences();
-    for (final key in defaults.keys) {
-      final value = values[key];
-      if (value is bool) {
-        defaults[key] = value;
-      } else if (value is String) {
-        defaults[key] = value.toLowerCase() == 'true';
-      } else if (value is num) {
-        defaults[key] = value != 0;
-      }
-    }
-    return defaults;
-  }
-
-  Map<String, bool> _defaultPreferences() => {
-    'email_enabled': true,
-    'due_date_reminders': true,
-    'payment_confirmations': true,
-    'weekly_summary': false,
-  };
 
   @override
   Widget build(BuildContext context) {
@@ -164,20 +124,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                if (user != null) ...[
-                  if (_preferencesError != null)
-                    Card(
-                      color: Colors.orange.shade50,
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Text(
-                          _preferencesError!,
-                          style: TextStyle(color: Colors.orange.shade900),
-                        ),
-                      ),
-                    ),
-                  _notificationPreferences(user.id),
-                ],
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
                   onPressed: user == null ? null : _confirmDeleteAccount,
@@ -209,46 +155,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       Text(label),
     ],
   );
-
-  Widget _notificationPreferences(String userId) {
-    const labels = {
-      'email_enabled': 'Recibir notificaciones por correo',
-      'due_date_reminders': 'Recordatorios de vencimiento',
-      'payment_confirmations': 'Confirmaciones de pago',
-      'weekly_summary': 'Resumen semanal',
-    };
-    return Card(
-      child: Column(
-        children: labels.entries.map((entry) {
-          return SwitchListTile(
-            title: Text(entry.value),
-            value: _preferences[entry.key] ?? false,
-            onChanged: (value) async {
-              final messenger = ScaffoldMessenger.of(context);
-              setState(() => _preferences[entry.key] = value);
-              try {
-                await _preferencesService.save(userId, _preferences);
-                if (!mounted) return;
-                setState(() => _preferencesError = null);
-              } on PostgrestException catch (error) {
-                if (error.code != 'PGRST205') rethrow;
-                if (!mounted) return;
-                setState(() {
-                  _preferences[entry.key] = !value;
-                  _preferencesError =
-                      'No se pudieron guardar las preferencias porque '
-                      'falta la tabla notification_preferences en Supabase.';
-                });
-                messenger.showSnackBar(
-                  SnackBar(content: Text(_preferencesError!)),
-                );
-              }
-            },
-          );
-        }).toList(),
-      ),
-    );
-  }
 
   Future<void> _confirmDeleteAccount() async {
     final confirmed = await showDialog<bool>(

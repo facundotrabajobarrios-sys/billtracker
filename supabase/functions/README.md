@@ -9,7 +9,10 @@ supabase functions deploy send-test-notification
 supabase secrets set RESEND_API_KEY=... MAIL_FROM="BillTracker <onboarding@resend.dev>"
 ```
 
-Configure Supabase Cron to invoke `send-bill-reminders` every 15 or 30 minutes.
+The `202609300001_bill_notification_channels.sql` migration schedules
+`send-bill-reminders` every minute with Supabase Cron. Before applying it, create
+the `billtracker_service_role_key` secret in Supabase Vault. The secret is used
+only by the scheduled database request and must never be committed.
 Never put these secrets in Flutter, GitHub Pages, or the repository.
 
 `send-test-notification` requires an authenticated Supabase session and sends a

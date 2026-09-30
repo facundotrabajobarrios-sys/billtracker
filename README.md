@@ -9,10 +9,7 @@ consultar el comportamiento de los gastos.
 - Registro, inicio de sesión, confirmación de correo y recuperación de contraseña.
 - Gestión de facturas: alta, edición, eliminación, filtros y estados pendiente,
   pagada y vencida.
-- Recordatorios locales y recordatorios por correo mediante Supabase Edge Functions.
-- Botón para probar notificaciones desde Home: email e inbox dentro de la web;
-  además, notificación inmediata del sistema en Android/iOS.
-- Preferencias de notificaciones por usuario.
+- Recordatorios configurables por factura: push local en móvil, correo e inbox.
 - Panel con resúmenes, gráficos y exportación a PDF o CSV.
 - Puntos, niveles e insignias por pagos realizados a tiempo.
 - Eliminación de cuenta desde la aplicación.
@@ -95,6 +92,16 @@ La tabla `audit_logs`:
 Si la tabla ya fue creada manualmente en Supabase, la migración es idempotente y
 puede utilizarse para mantener la configuración versionada.
 
+La migración
+[`supabase/migrations/202609300001_bill_notification_channels.sql`](supabase/migrations/202609300001_bill_notification_channels.sql)
+guarda los canales y la hora UTC de recordatorio de cada factura, y programa la
+Edge Function cada minuto mediante Supabase Cron.
+
+Antes de aplicar esta migración, crea en **Supabase → Database → Vault** un
+secreto llamado `billtracker_service_role_key` con el valor de la clave JWT
+`service_role` del proyecto. La clave queda en Vault y no se guarda en el
+repositorio ni en Flutter. La migración se detiene si el secreto no existe.
+
 ## Supabase CLI
 
 Instalación local de la CLI:
@@ -125,16 +132,18 @@ Supabase remoto. Solo hace falta para levantar el stack local de Supabase.
 ## Edge Functions y correo
 
 La función [`send-bill-reminders`](supabase/functions/send-bill-reminders/index.ts)
-consulta facturas pendientes, respeta las preferencias del usuario, registra la
-entrega y opcionalmente envía un correo mediante Resend.
+consulta facturas pendientes según los canales elegidos en cada factura,
+registra cada entrega y envía correo e inbox a la hora programada.
 
 Los valores `RESEND_API_KEY` y `MAIL_FROM` se crean en **Supabase → Edge
 Functions → Secrets**. Nunca deben incluirse en archivos Dart, el README,
 GitHub ni capturas de pantalla.
 
-La función debe ser invocada periódicamente mediante el mecanismo de scheduling
-configurado en Supabase o un servicio externo. Desplegarla por sí solo no crea
-una ejecución automática.
+El cron invoca la función cada minuto. El usuario configura anticipación de 1 a
+10 días y una hora local; la aplicación convierte el instante a UTC. El correo
+se envía a la dirección asociada a la cuenta, que puede ser Gmail. En móvil, el
+canal push es una notificación local del dispositivo; la web no implementa push
+de navegador.
 
 La función `send-test-notification` valida la sesión autenticada y envía un
 correo de prueba a la dirección de la cuenta actual. La notificación interna se

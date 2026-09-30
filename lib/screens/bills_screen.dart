@@ -90,6 +90,9 @@ class _BillsScreenState extends State<BillsScreen> {
     final updated = await _billService.markAsPaidWithGamification(bill.id);
 
     if (updated != null && userId != null) {
+      await PushNotificationService().cancelNotification(
+        PushNotificationService().generateId(bill.id),
+      );
       await gamificationProvider.loadGamification(userId, silent: true);
       if (!mounted) return;
       final currentBadges =

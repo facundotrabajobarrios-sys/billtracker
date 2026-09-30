@@ -3,7 +3,6 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -14,8 +13,6 @@ import 'package:printing/printing.dart';
 import '../providers/auth_provider.dart';
 import '../services/bill_service.dart';
 import '../services/notification_service.dart';
-import '../services/push_notification_service.dart';
-import '../services/notification_test_service.dart';
 import '../models/bill.dart';
 import 'bills_screen.dart';
 import 'achievements_screen.dart';
@@ -83,7 +80,6 @@ class _HomeContent extends StatefulWidget {
 class _HomeContentState extends State<_HomeContent> {
   final _billService = BillService();
   final _notiService = NotificationService();
-  final _notificationTestService = NotificationTestService();
 
   int _pending = 0;
   int _paid = 0;
@@ -91,7 +87,6 @@ class _HomeContentState extends State<_HomeContent> {
   int _total = 0;
   List<Bill> _allBills = [];
   bool _isLoading = true;
-  bool _isTestingNotifications = false;
   int _unreadCount = 0;
 
   // Filtros: por defecto últimos 30 días
@@ -135,78 +130,6 @@ class _HomeContentState extends State<_HomeContent> {
     if (userId != null) {
       _unreadCount = await _notiService.countUnread(userId);
       setState(() {});
-    }
-  }
-
-  Future<void> _sendTestNotifications() async {
-    if (_isTestingNotifications) return;
-    final userId = context.read<AuthProvider>().user?.id;
-    if (userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Inicia sesión para probar alertas.')),
-      );
-      return;
-    }
-
-    setState(() => _isTestingNotifications = true);
-    try {
-      final result = await _notificationTestService.sendAll(userId);
-      if (!mounted) return;
-      await _loadUnreadCount();
-      if (!mounted) return;
-
-      final email = context.read<AuthProvider>().user?.email ?? 'tu cuenta';
-      final outcomes = <String>[
-        if (result.inAppError == null)
-          'Notificación dentro de BillTracker: enviada'
-        else
-          'Notificación dentro de BillTracker: ${result.inAppError}',
-        if (result.emailError == null)
-          'Correo: enviado a $email'
-        else
-          'Correo: ${result.emailError}',
-        if (!kIsWeb &&
-            (defaultTargetPlatform == TargetPlatform.android ||
-                defaultTargetPlatform == TargetPlatform.iOS))
-          if (result.pushError == null)
-            'Push móvil: enviado'
-          else
-            'Push móvil: ${result.pushError}',
-      ];
-
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Resultado de la prueba'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: outcomes
-                .map(
-                  (outcome) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(outcome),
-                  ),
-                )
-                .toList(),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cerrar'),
-            ),
-          ],
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo ejecutar la prueba: $error')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isTestingNotifications = false);
-      }
     }
   }
 
@@ -580,29 +503,6 @@ class _HomeContentState extends State<_HomeContent> {
                   Text(
                     'Nivel: ${user?.level ?? 0} | Puntos: ${user?.points ?? 0}',
                     style: const TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _isTestingNotifications
-                          ? null
-                          : _sendTestNotifications,
-                      icon: _isTestingNotifications
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.notification_add_outlined),
-                      label: Text(
-                        _isTestingNotifications
-                            ? 'Enviando prueba...'
-                            : kIsWeb
-                            ? 'Probar correo y notificación en la web'
-                            : 'Probar notificaciones',
-                      ),
-                    ),
                   ),
                   const SizedBox(height: 16),
 

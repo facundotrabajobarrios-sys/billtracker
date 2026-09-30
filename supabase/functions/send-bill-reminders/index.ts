@@ -42,12 +42,12 @@ Deno.serve(async (request) => {
   }
 
   const now = new Date();
-  const cutoff = new Date(now.getTime() - 5 * 60 * 1000);
+  const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const { data: bills, error: billsError } = await supabase
     .from("bills")
     .select(`
-      id,user_id,due_date,reminder_at,reminder_push_enabled,
-      reminder_email_enabled,reminder_in_app_enabled,amount,currency,description,
+      id,user_id,due_date,reminder_at,reminder_email_enabled,
+      reminder_in_app_enabled,amount,currency,description,
       services(name),categories(name)
     `)
     .eq("status", "pending")
@@ -62,8 +62,10 @@ Deno.serve(async (request) => {
 
   let emailSent = 0;
   let inAppCreated = 0;
+  const deliveryErrors: string[] = [];
 
   for (const bill of bills ?? []) {
+    if (!bill.reminder_at) continue;
     const reminderAt = new Date(bill.reminder_at).toISOString();
     let { data: delivery, error: deliveryError } = await supabase
       .from("bill_reminder_deliveries")
@@ -74,7 +76,8 @@ Deno.serve(async (request) => {
 
     if (deliveryError) {
       console.error("Could not load reminder delivery:", deliveryError.message);
-      return Response.json({ error: "Could not load reminder delivery." }, { status: 500 });
+      deliveryErrors.push("delivery-lookup");
+      continue;
     }
 
     if (!delivery) {
@@ -86,7 +89,8 @@ Deno.serve(async (request) => {
         );
       if (inserted.error) {
         console.error("Could not register reminder delivery:", inserted.error.message);
-        return Response.json({ error: "Could not register reminder delivery." }, { status: 500 });
+        deliveryErrors.push("delivery-register");
+        continue;
       }
 
       const lookup = await supabase
@@ -97,7 +101,8 @@ Deno.serve(async (request) => {
         .single();
       if (lookup.error) {
         console.error("Could not read reminder delivery:", lookup.error.message);
-        return Response.json({ error: "Could not read reminder delivery." }, { status: 500 });
+        deliveryErrors.push("delivery-read");
+        continue;
       }
       delivery = lookup.data;
     }
@@ -122,90 +127,128 @@ Deno.serve(async (request) => {
     if (bill.reminder_email_enabled && !delivery.email_sent_at) {
       if (!resendApiKey) {
         console.error("RESEND_API_KEY is not configured.");
-        return Response.json({ error: "El correo no está configurado." }, { status: 503 });
-      }
-      const { data: authUser, error: userError } =
-        await supabase.auth.admin.getUserById(bill.user_id);
-      if (userError) {
-        console.error("Could not find reminder recipient:", userError.message);
-        return Response.json({ error: "Could not find reminder recipient." }, { status: 500 });
-      }
-      if (!authUser.user?.email) {
-        return Response.json({ error: "La cuenta no tiene correo electrónico." }, { status: 422 });
-      }
+        deliveryErrors.push("email-config");
+      } else {
+        const { data: authUser, error: userError } =
+          await supabase.auth.admin.getUserById(bill.user_id);
 
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${resendApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: sender,
-          to: [authUser.user.email],
-          subject: `Recordatorio de pago: ${serviceName}`,
-          text: message,
-          html: `
-            <h2>Recordatorio: ${escapeHtml(serviceName)}</h2>
-            <p>La factura debe ser pagada. Por favor, recuerde pagarla.</p>
-            <ul>
-              <li><strong>Servicio:</strong> ${escapeHtml(serviceName)}</li>
-              <li><strong>Categoría:</strong> ${escapeHtml(categoryName)}</li>
-              <li><strong>Descripción:</strong> ${escapeHtml(description)}</li>
-              <li><strong>Monto:</strong> ${escapeHtml(formattedAmount)}</li>
-              <li><strong>Vencimiento:</strong> ${escapeHtml(dueDate)}</li>
-            </ul>
-          `,
-        }),
-      });
+        if (userError || !authUser.user?.email) {
+          console.error(
+            "Could not resolve reminder recipient:",
+            userError?.message ?? "Account has no email.",
+          );
+          deliveryErrors.push("email-recipient");
+        } else {
+          try {
+            const response = await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${resendApiKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                from: sender,
+                to: [authUser.user.email],
+                subject: `Recordatorio de pago: ${serviceName}`,
+                text: message,
+                html: `
+                  <h2>Recordatorio: ${escapeHtml(serviceName)}</h2>
+                  <p>La factura debe ser pagada. Por favor, recuerde pagarla.</p>
+                  <ul>
+                    <li><strong>Servicio:</strong> ${escapeHtml(serviceName)}</li>
+                    <li><strong>Categoría:</strong> ${escapeHtml(categoryName)}</li>
+                    <li><strong>Descripción:</strong> ${escapeHtml(description)}</li>
+                    <li><strong>Monto:</strong> ${escapeHtml(formattedAmount)}</li>
+                    <li><strong>Vencimiento:</strong> ${escapeHtml(dueDate)}</li>
+                  </ul>
+                `,
+              }),
+            });
 
-      if (!response.ok) {
-        const details = await response.text();
-        console.error("Resend rejected reminder:", response.status, details);
-        return Response.json({ error: "El proveedor de correo rechazó el recordatorio." }, { status: 502 });
+            if (!response.ok) {
+              const details = await response.text();
+              console.error("Resend rejected reminder:", response.status, details);
+              deliveryErrors.push("email-provider");
+            } else {
+              const updatedDelivery = await supabase
+                .from("bill_reminder_deliveries")
+                .update({ email_sent_at: now.toISOString() })
+                .eq("bill_id", bill.id)
+                .eq("reminder_at", reminderAt);
+              if (updatedDelivery.error) {
+                console.error(
+                  "Could not record email delivery:",
+                  updatedDelivery.error.message,
+                );
+                deliveryErrors.push("email-record");
+              } else {
+                emailSent++;
+              }
+            }
+          } catch (error) {
+            console.error("Could not contact the email provider:", error);
+            deliveryErrors.push("email-network");
+          }
+        }
       }
-
-      const updatedDelivery = await supabase
-        .from("bill_reminder_deliveries")
-        .update({ email_sent_at: now.toISOString() })
-        .eq("bill_id", bill.id)
-        .eq("reminder_at", reminderAt);
-      if (updatedDelivery.error) {
-        console.error("Could not record email delivery:", updatedDelivery.error.message);
-        return Response.json({ error: "Could not record email delivery." }, { status: 500 });
-      }
-      emailSent++;
     }
 
     if (bill.reminder_in_app_enabled && !delivery.notification_created_at) {
-      const notification = await supabase
+      const existingNotification = await supabase
         .from("notifications")
-        .insert({
-          user_id: bill.user_id,
-          bill_id: bill.id,
-          title: `Recordatorio de pago: ${serviceName}`,
-          message,
-          type: "reminder",
-          scheduled_at: reminderAt,
-          sent_at: now.toISOString(),
-        });
-      if (notification.error) {
-        console.error("Could not create in-app reminder:", notification.error.message);
-        return Response.json({ error: "Could not create in-app reminder." }, { status: 500 });
-      }
-
-      const updatedDelivery = await supabase
-        .from("bill_reminder_deliveries")
-        .update({ notification_created_at: now.toISOString() })
+        .select("id")
         .eq("bill_id", bill.id)
-        .eq("reminder_at", reminderAt);
-      if (updatedDelivery.error) {
-        console.error("Could not record in-app delivery:", updatedDelivery.error.message);
-        return Response.json({ error: "Could not record in-app delivery." }, { status: 500 });
+        .eq("scheduled_at", reminderAt)
+        .eq("type", "reminder")
+        .maybeSingle();
+
+      if (existingNotification.error) {
+        console.error(
+          "Could not check existing in-app reminder:",
+          existingNotification.error.message,
+        );
+        deliveryErrors.push("in-app-insert");
+      } else {
+        if (!existingNotification.data) {
+          const notification = await supabase.from("notifications").insert({
+            user_id: bill.user_id,
+            bill_id: bill.id,
+            title: `Recordatorio de pago: ${serviceName}`,
+            message,
+            type: "reminder",
+            scheduled_at: reminderAt,
+            sent_at: now.toISOString(),
+          });
+          if (notification.error) {
+            console.error(
+              "Could not create in-app reminder:",
+              notification.error.message,
+            );
+            deliveryErrors.push("in-app-insert");
+            continue;
+          }
+        }
+
+        const updatedDelivery = await supabase
+          .from("bill_reminder_deliveries")
+          .update({ notification_created_at: now.toISOString() })
+          .eq("bill_id", bill.id)
+          .eq("reminder_at", reminderAt);
+        if (updatedDelivery.error) {
+          console.error(
+            "Could not record in-app delivery:",
+            updatedDelivery.error.message,
+          );
+          deliveryErrors.push("in-app-record");
+        } else {
+          if (!existingNotification.data) inAppCreated++;
+        }
       }
-      inAppCreated++;
     }
   }
 
-  return Response.json({ emailSent, inAppCreated });
+  return Response.json(
+    { emailSent, inAppCreated, errors: deliveryErrors },
+    { status: deliveryErrors.length === 0 ? 200 : 500 },
+  );
 });

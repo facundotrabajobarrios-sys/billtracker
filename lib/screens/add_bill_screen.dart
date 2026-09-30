@@ -215,6 +215,19 @@ class _AddBillScreenState extends State<AddBillScreen> {
       _showError('Selecciona una categoría');
       return;
     }
+    final hasEnabledReminderChannel =
+        _reminderEmailEnabled ||
+        _reminderInAppEnabled ||
+        (_supportsPushNotifications && _reminderPushEnabled);
+    if (_selectedStatus == 'pending' &&
+        hasEnabledReminderChannel &&
+        !_reminderDateTime.isAfter(DateTime.now())) {
+      _showError(
+        'La fecha y hora del recordatorio ya pasaron. Ajusta el vencimiento, '
+        'la anticipación o la hora.',
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 

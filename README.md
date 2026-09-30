@@ -145,6 +145,11 @@ se envía a la dirección asociada a la cuenta, que puede ser Gmail. En móvil, 
 canal push es una notificación local del dispositivo; la web no implementa push
 de navegador.
 
+La función procesa el correo y la bandeja como canales independientes: un
+problema de Resend no impide crear la notificación interna. Los recordatorios
+fallidos se reintentan durante las siguientes 24 horas; cada canal registra su
+propia entrega para evitar repetir los que sí tuvieron éxito.
+
 La función `send-test-notification` valida la sesión autenticada y envía un
 correo de prueba a la dirección de la cuenta actual. La notificación interna se
 guarda en `notifications`; en Android/iOS se muestra además una notificación

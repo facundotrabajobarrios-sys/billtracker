@@ -43,6 +43,8 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
     final isLoading = gamificationProvider.isLoading;
     final showCelebration = gamificationProvider.showCelebration;
     final newBadges = gamificationProvider.getNewBadgeDetails();
+    final badges = gamificationProvider.getBadgesWithStatus();
+    final unlockedBadges = badges.where((badge) => badge.isUnlocked).toList();
 
     return SimpleConfetti(
       trigger: gamificationProvider.showConfetti,
@@ -78,16 +80,24 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
                       _buildProgressBar(gamification),
                       const SizedBox(height: 24),
                       const Text(
-                        '🏅 Insignias',
+                        '🏆 Trofeos ganados',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       const SizedBox(height: 12),
-                      _buildBadgesGrid(
-                        gamificationProvider.getBadgesWithStatus(),
+                      _buildUnlockedBadges(unlockedBadges),
+                      const SizedBox(height: 24),
+                      const Text(
+                        '🏅 Todas las insignias',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
+                      const SizedBox(height: 12),
+                      _buildBadgesGrid(badges),
                     ],
                   ),
                 ),
@@ -254,6 +264,38 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
         final badge = badges[index];
         return _buildBadgeCard(badge);
       },
+    );
+  }
+
+  Widget _buildUnlockedBadges(List<AchievementBadge> badges) {
+    if (badges.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Text(
+            'Todavía no has desbloqueado trofeos. Paga una factura para '
+            'obtener tu primera insignia.',
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      child: Column(
+        children: badges
+            .map(
+              (badge) => ListTile(
+                leading: Text(badge.icon, style: const TextStyle(fontSize: 30)),
+                title: Text(
+                  badge.name,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text(badge.description),
+                trailing: const Icon(Icons.check_circle, color: Colors.green),
+              ),
+            )
+            .toList(),
+      ),
     );
   }
 

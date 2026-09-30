@@ -10,6 +10,8 @@ consultar el comportamiento de los gastos.
 - Gestión de facturas: alta, edición, eliminación, filtros y estados pendiente,
   pagada y vencida.
 - Recordatorios locales y recordatorios por correo mediante Supabase Edge Functions.
+- Botón para probar notificaciones desde Home: email e inbox dentro de la web;
+  además, notificación inmediata del sistema en Android/iOS.
 - Preferencias de notificaciones por usuario.
 - Panel con resúmenes, gráficos y exportación a PDF o CSV.
 - Puntos, niveles e insignias por pagos realizados a tiempo.
@@ -113,6 +115,7 @@ Desplegar las funciones:
 
 ```powershell
 npx supabase functions deploy send-bill-reminders --use-api
+npx supabase functions deploy send-test-notification --use-api
 npx supabase functions deploy delete-account --use-api
 ```
 
@@ -132,6 +135,11 @@ GitHub ni capturas de pantalla.
 La función debe ser invocada periódicamente mediante el mecanismo de scheduling
 configurado en Supabase o un servicio externo. Desplegarla por sí solo no crea
 una ejecución automática.
+
+La función `send-test-notification` valida la sesión autenticada y envía un
+correo de prueba a la dirección de la cuenta actual. La notificación interna se
+guarda en `notifications`; en Android/iOS se muestra además una notificación
+local inmediata. La versión web no implementa push del navegador.
 
 ## Seguridad
 

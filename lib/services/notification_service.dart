@@ -103,6 +103,24 @@ class NotificationService {
     }
   }
 
+  Future<NotificationModel?> createTestNotification(String userId) async {
+    final authenticatedUserId = _client.auth.currentUser?.id;
+    if (authenticatedUserId == null || authenticatedUserId != userId) {
+      throw StateError('No hay una sesión válida para crear la notificación.');
+    }
+
+    return createNotification(
+      NotificationModel(
+        id: '',
+        userId: userId,
+        title: 'Prueba de notificación',
+        message: 'Las notificaciones de BillTracker están funcionando.',
+        type: 'info',
+        sentAt: DateTime.now(),
+      ),
+    );
+  }
+
   Future<bool> markAsRead(String notificationId, {String? userId}) async {
     try {
       final resolvedUserId = userId ?? await _getCurrentUserId();

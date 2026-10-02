@@ -67,7 +67,12 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.receipt_long, size: 80, color: Colors.green[700]),
+                  Image.asset(
+                    'assets/icons/billtracker.png',
+                    width: 88,
+                    height: 88,
+                    semanticLabel: 'Logo de BillTracker',
+                  ),
                   const SizedBox(height: 16),
                   const Text(
                     'BillTracker',

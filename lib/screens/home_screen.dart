@@ -15,6 +15,7 @@ import '../services/bill_service.dart';
 import '../services/notification_service.dart';
 import '../services/push_notification_service.dart';
 import '../models/bill.dart';
+import '../utils/bill_report_filter.dart';
 import 'bills_screen.dart';
 import 'achievements_screen.dart';
 import 'profile_screen.dart';
@@ -152,26 +153,12 @@ class _HomeContentState extends State<_HomeContent> {
   }
 
   List<Bill> get _filteredBills {
-    final startDate = DateTime(
-      _startDate.year,
-      _startDate.month,
-      _startDate.day,
+    return filterBillsForReport(
+      _allBills,
+      startDate: _startDate,
+      endDate: _endDate,
+      category: _selectedCategory,
     );
-    final endDate = DateTime(_endDate.year, _endDate.month, _endDate.day);
-
-    bool isWithinRange(DateTime date) {
-      final dateOnly = DateTime(date.year, date.month, date.day);
-      return !dateOnly.isBefore(startDate) && !dateOnly.isAfter(endDate);
-    }
-
-    return _allBills.where((b) {
-      final dueDateInRange = isWithinRange(b.dueDate);
-      final paidDateInRange =
-          b.isPaid && b.paidDate != null && isWithinRange(b.paidDate!);
-      final matchesCategory =
-          _selectedCategory == null || b.category?.name == _selectedCategory;
-      return (dueDateInRange || paidDateInRange) && matchesCategory;
-    }).toList()..sort((a, b) => a.dueDate.compareTo(b.dueDate));
   }
 
   // Datos agrupados por mes (últimos 6 meses)
@@ -458,7 +445,18 @@ class _HomeContentState extends State<_HomeContent> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BillTracker'),
+        title: Row(
+          children: [
+            Image.asset(
+              'assets/icons/billtracker.png',
+              width: 32,
+              height: 32,
+              semanticLabel: 'Logo de BillTracker',
+            ),
+            const SizedBox(width: 10),
+            const Text('BillTracker'),
+          ],
+        ),
         backgroundColor: Colors.green[700],
         foregroundColor: Colors.white,
         actions: [

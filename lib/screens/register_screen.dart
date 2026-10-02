@@ -101,8 +101,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // 🎨 Logo
-                  Icon(Icons.person_add, size: 60, color: Colors.green[700]),
+                  Image.asset(
+                    'assets/icons/billtracker.png',
+                    width: 72,
+                    height: 72,
+                    semanticLabel: 'Logo de BillTracker',
+                  ),
                   const SizedBox(height: 16),
                   const Text(
                     'Regístrate en BillTracker',

@@ -30,8 +30,8 @@ class NotificationService {
   Future<List<NotificationModel>> getNotifications(String? userId) async {
     final resolvedUserId = userId ?? await _getCurrentUserId();
     if (resolvedUserId == null || resolvedUserId.isEmpty) {
-      throw Exception(
-        'No hay un usuario autenticado para cargar notificaciones',
+      throw StateError(
+        'No hay un usuario autenticado para cargar notificaciones.',
       );
     }
 

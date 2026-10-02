@@ -41,7 +41,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _loadError = error.toString());
+      setState(() {
+        _loadError = 'No se pudieron cargar las notificaciones: $error';
+      });
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import '../providers/auth_provider.dart';
 import '../services/bill_service.dart';
 import '../services/push_notification_service.dart';
@@ -19,6 +21,10 @@ class AddBillScreen extends StatefulWidget {
 class _AddBillScreenState extends State<AddBillScreen> {
   final _formKey = GlobalKey<FormState>();
   final _billService = BillService();
+  bool get _supportsPushNotifications =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   // 🔤 Controladores
   final _amountController = TextEditingController();
@@ -35,6 +41,9 @@ class _AddBillScreenState extends State<AddBillScreen> {
   bool _isRecurring = false;
   int _reminderDays = 3;
   int _reminderTimeMinutes = 9 * 60;
+  bool _reminderPushEnabled = true;
+  bool _reminderEmailEnabled = true;
+  bool _reminderInAppEnabled = true;
   bool _isLoading = false;
   bool _isAddingService = false;
   bool _isEditing = false; // ✅ Bandera para saber si es edición
@@ -75,6 +84,9 @@ class _AddBillScreenState extends State<AddBillScreen> {
     _isRecurring = bill.isRecurring;
     _reminderDays = bill.reminderDays ?? 3;
     _reminderTimeMinutes = bill.reminderTimeMinutes;
+    _reminderPushEnabled = bill.reminderPushEnabled;
+    _reminderEmailEnabled = bill.reminderEmailEnabled;
+    _reminderInAppEnabled = bill.reminderInAppEnabled;
     _setReminderTimeFields();
     if (bill.description != null) {
       _descriptionController.text = bill.description!;
@@ -97,6 +109,14 @@ class _AddBillScreenState extends State<AddBillScreen> {
       _reminderTimeMinutes = hour * 60 + minute;
     }
   }
+
+  DateTime get _reminderDateTime => DateTime(
+    _selectedDate.year,
+    _selectedDate.month,
+    _selectedDate.day - _reminderDays,
+    _reminderTimeMinutes ~/ 60,
+    _reminderTimeMinutes % 60,
+  );
 
   // 📥 Cargar servicios y categorías
   Future<void> _loadData() async {
@@ -165,40 +185,35 @@ class _AddBillScreenState extends State<AddBillScreen> {
   }
 
   Future<void> _scheduleBillReminder(Bill bill) async {
-    final serviceName = bill.service?.name ?? 'Factura';
-    final reminderDays = bill.reminderDays ?? 3;
-    final reminderDate = bill.dueDate
-        .subtract(Duration(days: reminderDays))
-        .copyWith(
-          hour: bill.reminderTimeMinutes ~/ 60,
-          minute: bill.reminderTimeMinutes % 60,
-          second: 0,
-          millisecond: 0,
-          microsecond: 0,
-        );
-
-    if (reminderDate.isAfter(DateTime.now())) {
-      final notificationId = PushNotificationService().generateId(bill.id);
-      await PushNotificationService().scheduleNotification(
-        id: notificationId,
-        title: '📋 Recordatorio de pago',
-        body: 'La factura de $serviceName vence en $reminderDays días',
-        scheduledDate: reminderDate,
-        payload: bill.id,
-      );
-      debugPrint('📅 Recordatorio programado para ${bill.id}');
-    }
+    await PushNotificationService().scheduleBillReminder(bill);
   }
 
   // 📝 Guardar factura (crear o actualizar)
   Future<void> _saveBill() async {
     if (!_formKey.currentState!.validate()) return;
+    _updateReminderTime();
     if (_selectedServiceId == null) {
       _showError('Selecciona un servicio');
       return;
     }
     if (_selectedCategoryId == null) {
       _showError('Selecciona una categoría');
+      return;
+    }
+    final hasReminderChannel =
+        _reminderEmailEnabled ||
+        _reminderInAppEnabled ||
+        (_supportsPushNotifications && _reminderPushEnabled);
+    if (_selectedStatus == 'pending' &&
+        hasReminderChannel &&
+        !_reminderDateTime.isAfter(DateTime.now())) {
+      final reminderLabel = DateFormat(
+        'dd/MM/yyyy HH:mm',
+      ).format(_reminderDateTime);
+      _showError(
+        'El recordatorio quedó para $reminderLabel y esa fecha/hora ya pasó. '
+        'Ajusta el vencimiento o los días de anticipación.',
+      );
       return;
     }
 
@@ -226,6 +241,14 @@ class _AddBillScreenState extends State<AddBillScreen> {
       isRecurring: _isRecurring,
       reminderDays: _reminderDays,
       reminderTimeMinutes: _reminderTimeMinutes,
+      reminderAt: _reminderDateTime,
+      reminderPushEnabled: _supportsPushNotifications
+          ? _reminderPushEnabled
+          : _isEditing
+          ? widget.bill!.reminderPushEnabled
+          : true,
+      reminderEmailEnabled: _reminderEmailEnabled,
+      reminderInAppEnabled: _reminderInAppEnabled,
     );
 
     // ✅ Guardar o actualizar
@@ -236,9 +259,22 @@ class _AddBillScreenState extends State<AddBillScreen> {
     setState(() => _isLoading = false);
 
     if (result != null) {
-      await _scheduleBillReminder(result);
+      String? reminderError;
+      try {
+        await _scheduleBillReminder(result);
+      } catch (error) {
+        reminderError = error.toString();
+        debugPrint('No se pudo programar el recordatorio local: $error');
+      }
       if (!mounted) return;
-      _showSuccess(_isEditing ? 'Factura actualizada' : 'Factura creada');
+      if (reminderError == null) {
+        _showSuccess(_isEditing ? 'Factura actualizada' : 'Factura creada');
+      } else {
+        _showError(
+          'La factura se guardó, pero no se programó el recordatorio del '
+          'dispositivo: $reminderError',
+        );
+      }
       if (!mounted) return;
       Navigator.pop(context, true);
     } else if (mounted) {
@@ -469,11 +505,9 @@ class _AddBillScreenState extends State<AddBillScreen> {
                     Row(
                       children: [
                         const Icon(Icons.schedule),
-                        const SizedBox(width: 8),
-                        const Text('Hora:'),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 12),
                         SizedBox(
-                          width: 64,
+                          width: 56,
                           child: TextFormField(
                             controller: _reminderHourController,
                             keyboardType: TextInputType.number,
@@ -483,7 +517,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
                               FilteringTextInputFormatter.digitsOnly,
                             ],
                             decoration: const InputDecoration(
-                              hintText: '00',
+                              hintText: 'HH',
                               counterText: '',
                               border: OutlineInputBorder(),
                             ),
@@ -498,10 +532,8 @@ class _AddBillScreenState extends State<AddBillScreen> {
                           padding: EdgeInsets.symmetric(horizontal: 6),
                           child: Text(':'),
                         ),
-                        const Text('Min:'),
-                        const SizedBox(width: 8),
                         SizedBox(
-                          width: 64,
+                          width: 56,
                           child: TextFormField(
                             controller: _reminderMinuteController,
                             keyboardType: TextInputType.number,
@@ -511,7 +543,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
                               FilteringTextInputFormatter.digitsOnly,
                             ],
                             decoration: const InputDecoration(
-                              hintText: '00',
+                              hintText: 'MM',
                               counterText: '',
                               border: OutlineInputBorder(),
                             ),
@@ -525,6 +557,49 @@ class _AddBillScreenState extends State<AddBillScreen> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Canales de recordatorio',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    if (_supportsPushNotifications)
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        secondary: const Icon(Icons.notifications_active),
+                        title: const Text('Notificación en este dispositivo'),
+                        subtitle: const Text(
+                          'Alerta local en Android/iOS, aunque la app esté cerrada',
+                        ),
+                        value: _reminderPushEnabled,
+                        onChanged: (value) =>
+                            setState(() => _reminderPushEnabled = value),
+                      ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      secondary: const Icon(Icons.email_outlined),
+                      title: const Text('Correo electrónico'),
+                      subtitle: const Text(
+                        'Enviar el recordatorio al correo de tu cuenta',
+                      ),
+                      value: _reminderEmailEnabled,
+                      onChanged: (value) =>
+                          setState(() => _reminderEmailEnabled = value),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      secondary: const Icon(Icons.inbox_outlined),
+                      title: const Text('Bandeja de la aplicación'),
+                      subtitle: const Text(
+                        'Mostrar el recordatorio en Notificaciones',
+                      ),
+                      value: _reminderInAppEnabled,
+                      onChanged: (value) =>
+                          setState(() => _reminderInAppEnabled = value),
                     ),
                     const SizedBox(height: 16),
 

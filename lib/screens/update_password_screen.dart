@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import 'login_screen.dart';
 import '../utils/validators.dart';
 import '../widgets/password_strength_indicator.dart';
 
@@ -30,12 +31,14 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {
+      final navigator = Navigator.of(context);
       await context.read<AuthProvider>().updatePassword(
         _passwordController.text,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Contraseña actualizada correctamente')),
+      navigator.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (_) => false,
       );
     } catch (error) {
       if (!mounted) return;

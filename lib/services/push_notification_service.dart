@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/services.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'bill_service.dart';
+import '../models/bill.dart';
 
 class PushNotificationService {
   PushNotificationService._internal();
@@ -13,6 +15,9 @@ class PushNotificationService {
 
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
+  static const MethodChannel _androidNotificationChannel = MethodChannel(
+    'billtracker/notifications',
+  );
   final BillService _billService = BillService();
 
   GlobalKey<NavigatorState>? _navigatorKey;
@@ -56,12 +61,33 @@ class PushNotificationService {
       },
     );
 
+    await _pendingNotificationRequestsWithRepair();
     await _requestPermissions();
 
     _isInitialized = true;
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _handlePendingPayload(),
     );
+  }
+
+  Future<List<PendingNotificationRequest>>
+  _pendingNotificationRequestsWithRepair() async {
+    try {
+      return await _notifications.pendingNotificationRequests();
+    } on PlatformException catch (error) {
+      if (defaultTargetPlatform != TargetPlatform.android ||
+          !error.message.toString().contains('Missing type parameter')) {
+        rethrow;
+      }
+      debugPrint(
+        'Se detectaron recordatorios Android incompatibles; se limpiarán y '
+        'se recuperarán desde las facturas guardadas: $error',
+      );
+      await _androidNotificationChannel.invokeMethod<void>(
+        'repairScheduledNotifications',
+      );
+      return _notifications.pendingNotificationRequests();
+    }
   }
 
   Future<void> _requestPermissions() async {
@@ -88,6 +114,7 @@ class PushNotificationService {
     if (!_isSupportedPlatform) {
       return;
     }
+    await _ensureAndroidSchedulePermissions();
     const androidChannel = AndroidNotificationDetails(
       'billtracker_channel',
       'BillTracker',
@@ -114,6 +141,116 @@ class PushNotificationService {
           UILocalNotificationDateInterpretation.absoluteTime,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     );
+  }
+
+  Future<void> scheduleBillReminder(Bill bill) async {
+    final notificationId = generateId(bill.id);
+    await cancelNotification(notificationId);
+    if (bill.status != 'pending' || !bill.reminderPushEnabled) return;
+
+    final reminderDate = _reminderDateFor(bill);
+    if (!reminderDate.isAfter(DateTime.now())) return;
+
+    await scheduleNotification(
+      id: notificationId,
+      title: '📋 Recordatorio de pago',
+      body:
+          '${bill.service?.name ?? 'Factura'} · ${bill.formattedAmount} · '
+          'vence ${bill.formattedDueDate}'
+          '${bill.category?.name == null ? '' : ' · ${bill.category!.name}'}',
+      scheduledDate: reminderDate,
+      payload: bill.id,
+    );
+  }
+
+  DateTime _reminderDateFor(Bill bill) {
+    return bill.reminderAt?.toLocal() ??
+        bill.dueDate
+            .subtract(Duration(days: bill.reminderDays ?? 3))
+            .copyWith(
+              hour: bill.reminderTimeMinutes ~/ 60,
+              minute: bill.reminderTimeMinutes % 60,
+              second: 0,
+              millisecond: 0,
+              microsecond: 0,
+            );
+  }
+
+  Future<void> reconcileBillReminders(Iterable<Bill> bills) async {
+    if (!_isSupportedPlatform) return;
+
+    final billsList = bills.toList();
+    final eligibleBills = billsList
+        .where(
+          (bill) =>
+              bill.status == 'pending' &&
+              bill.reminderPushEnabled &&
+              _reminderDateFor(bill).isAfter(DateTime.now()),
+        )
+        .toList();
+    if (eligibleBills.isNotEmpty) {
+      await _ensureAndroidSchedulePermissions();
+    }
+    final pending = await _pendingNotificationRequestsWithRepair();
+    final billsById = {for (final bill in billsList) bill.id: bill};
+    final eligibleIds = eligibleBills.map((bill) => bill.id).toSet();
+    final pendingIds = <int>{};
+    for (final request in pending) {
+      final billId = request.payload;
+      final bill = billId == null ? null : billsById[billId];
+      if (bill == null) continue;
+
+      final expectedId = generateId(bill.id);
+      if (!eligibleIds.contains(bill.id)) {
+        await cancelNotification(request.id);
+      } else if (request.id != expectedId) {
+        await cancelNotification(request.id);
+      } else {
+        pendingIds.add(request.id);
+      }
+    }
+
+    for (final bill in eligibleBills) {
+      final id = generateId(bill.id);
+      if (pendingIds.contains(id)) continue;
+      await scheduleBillReminder(bill);
+    }
+  }
+
+  Future<void> _ensureAndroidSchedulePermissions() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    final androidNotifications = _notifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    if (androidNotifications == null) {
+      throw StateError('No se pudo inicializar el servicio de notificaciones.');
+    }
+
+    var notificationsEnabled =
+        await androidNotifications.areNotificationsEnabled() ?? false;
+    if (!notificationsEnabled) {
+      notificationsEnabled =
+          await androidNotifications.requestNotificationsPermission() ?? false;
+    }
+    if (!notificationsEnabled) {
+      throw StateError(
+        'Android no tiene permiso para mostrar notificaciones de BillTracker.',
+      );
+    }
+
+    var exactAlarmsEnabled =
+        await androidNotifications.canScheduleExactNotifications() ?? false;
+    if (!exactAlarmsEnabled) {
+      await androidNotifications.requestExactAlarmsPermission();
+      exactAlarmsEnabled =
+          await androidNotifications.canScheduleExactNotifications() ?? false;
+    }
+    if (!exactAlarmsEnabled) {
+      throw StateError(
+        'Habilita las alarmas exactas de BillTracker en los ajustes de Android.',
+      );
+    }
   }
 
   Future<void> showImmediateNotification({
@@ -166,11 +303,15 @@ class PushNotificationService {
     if (!_isSupportedPlatform) {
       return [];
     }
-    return _notifications.pendingNotificationRequests();
+    return _pendingNotificationRequestsWithRepair();
   }
 
   int generateId(String billId) {
-    return billId.hashCode;
+    var hash = 0x811c9dc5;
+    for (final codeUnit in billId.codeUnits) {
+      hash = ((hash ^ codeUnit) * 0x01000193) & 0x7fffffff;
+    }
+    return hash;
   }
 
   Future<void> _handleNotificationResponse(String? payload) async {

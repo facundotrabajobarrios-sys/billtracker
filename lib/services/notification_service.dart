@@ -28,25 +28,20 @@ class NotificationService {
   }
 
   Future<List<NotificationModel>> getNotifications(String? userId) async {
-    try {
-      final resolvedUserId = userId ?? await _getCurrentUserId();
-      if (resolvedUserId == null || resolvedUserId.isEmpty) {
-        throw Exception(
-          'No hay un usuario autenticado para cargar notificaciones',
-        );
-      }
-
-      final response = await _client
-          .from('notifications')
-          .select()
-          .eq('user_id', resolvedUserId)
-          .order('created_at', ascending: false);
-
-      return response.map((json) => NotificationModel.fromJson(json)).toList();
-    } catch (e) {
-      print('❌ Error al obtener notificaciones: $e');
-      return [];
+    final resolvedUserId = userId ?? await _getCurrentUserId();
+    if (resolvedUserId == null || resolvedUserId.isEmpty) {
+      throw Exception(
+        'No hay un usuario autenticado para cargar notificaciones',
+      );
     }
+
+    final response = await _client
+        .from('notifications')
+        .select()
+        .eq('user_id', resolvedUserId)
+        .order('created_at', ascending: false);
+
+    return response.map((json) => NotificationModel.fromJson(json)).toList();
   }
 
   Future<List<NotificationModel>> getUnreadNotifications(String? userId) async {

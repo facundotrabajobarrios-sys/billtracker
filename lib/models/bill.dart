@@ -19,6 +19,10 @@ class Bill {
   final bool isRecurring;
   final int? reminderDays;
   final int reminderTimeMinutes;
+  final DateTime? reminderAt;
+  final bool reminderPushEnabled;
+  final bool reminderEmailEnabled;
+  final bool reminderInAppEnabled;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -41,6 +45,10 @@ class Bill {
     this.isRecurring = false,
     this.reminderDays = 3,
     this.reminderTimeMinutes = 9 * 60,
+    this.reminderAt,
+    this.reminderPushEnabled = true,
+    this.reminderEmailEnabled = true,
+    this.reminderInAppEnabled = true,
     this.createdAt,
     this.updatedAt,
     this.service,
@@ -68,6 +76,12 @@ class Bill {
       isRecurring: json['is_recurring'] ?? false,
       reminderDays: json['reminder_days'] ?? 3,
       reminderTimeMinutes: json['reminder_time_minutes'] ?? 9 * 60,
+      reminderAt: json['reminder_at'] == null
+          ? null
+          : DateTime.parse(json['reminder_at']).toLocal(),
+      reminderPushEnabled: json['reminder_push_enabled'] ?? true,
+      reminderEmailEnabled: json['reminder_email_enabled'] ?? true,
+      reminderInAppEnabled: json['reminder_in_app_enabled'] ?? true,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : null,
@@ -101,6 +115,10 @@ class Bill {
       'is_recurring': isRecurring,
       'reminder_days': reminderDays,
       'reminder_time_minutes': reminderTimeMinutes,
+      'reminder_at': reminderAt?.toUtc().toIso8601String(),
+      'reminder_push_enabled': reminderPushEnabled,
+      'reminder_email_enabled': reminderEmailEnabled,
+      'reminder_in_app_enabled': reminderInAppEnabled,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
     };

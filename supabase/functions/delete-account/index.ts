@@ -14,12 +14,26 @@ Deno.serve(async (request) => {
   const { data: { user }, error } = await admin.auth.getUser(token);
   if (error || !user) return new Response("Invalid session", { status: 401 });
 
-  // Delete application data before deleting the Auth identity.
-  for (const table of ["notification_preferences", "bills", "services", "users"]) {
-    const column = table === "bills" || table === "services" ? "user_id" : "id";
+  // Remove dependent application rows before deleting the Auth identity.
+  for (
+    const table of [
+      "notification_preferences",
+      "notifications",
+      "gamifications",
+      "bills",
+      "services",
+      "users",
+    ]
+  ) {
+    const column = table === "users" ? "id" : "user_id";
     const result = await admin.from(table).delete().eq(column, user.id);
     if (result.error) {
-      return Response.json({ error: `Could not delete ${table}` }, { status: 500 });
+      console.error(`Could not delete ${table}:`, result.error);
+      return Response.json({
+        error: `Could not delete ${table}`,
+        code: result.error.code,
+        message: result.error.message,
+      }, { status: 500 });
     }
   }
   const deleted = await admin.auth.admin.deleteUser(user.id);

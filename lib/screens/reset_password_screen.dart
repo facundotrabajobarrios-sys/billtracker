@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import '../services/auth_service.dart';
 
 // 🔑 Pantalla de recuperación de contraseña
@@ -29,29 +30,32 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         _isLoading = true;
       });
 
-      final success = await _authService.resetPassword(
-        _emailController.text.trim(),
-      );
-
-      setState(() {
-        _isLoading = false;
-        _emailSent = success;
-      });
-
-      if (success && mounted) {
+      try {
+        await _authService.resetPassword(_emailController.text.trim());
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _emailSent = true;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('✅ Correo de recuperación enviado'),
             backgroundColor: Colors.green,
           ),
         );
-      } else if (mounted) {
+      } catch (error) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        final message = error is supabase.AuthException
+            ? error.message
+            : error.toString();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('❌ Error al enviar correo. Intenta de nuevo'),
+          SnackBar(
+            content: Text('❌ No se pudo enviar el correo: $message'),
             backgroundColor: Colors.red,
           ),
         );
+        debugPrint('Error al enviar correo de recuperación: $error');
       }
     }
   }

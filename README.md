@@ -9,8 +9,8 @@ consultar el comportamiento de los gastos.
 - Registro, inicio de sesión, confirmación de correo y recuperación de contraseña.
 - Gestión de facturas: alta, edición, eliminación, filtros y estados pendiente,
   pagada y vencida.
-- Recordatorios locales y recordatorios por correo mediante Supabase Edge Functions.
-- Preferencias de notificaciones por usuario.
+- Recordatorios configurables por factura: correo y bandeja interna en la web y
+  móvil; notificación local en Android/iOS. La web no solicita permisos push.
 - Panel con resúmenes, gráficos y exportación a PDF o CSV.
 - Puntos, niveles e insignias por pagos realizados a tiempo.
 - Eliminación de cuenta desde la aplicación.
@@ -80,6 +80,8 @@ administrados por Supabase. No deben copiarse a Flutter ni al repositorio.
 
 La migración de preferencias de notificaciones se encuentra en
 [`supabase/migrations/202609210001_email_notifications.sql`](supabase/migrations/202609210001_email_notifications.sql).
+Los canales por factura y su fecha de entrega se definen en
+[`supabase/migrations/202610020001_invoice_notification_channels.sql`](supabase/migrations/202610020001_invoice_notification_channels.sql).
 La tabla de auditoría se define en
 [`supabase/migrations/202609230002_audit_logs.sql`](supabase/migrations/202609230002_audit_logs.sql).
 
@@ -116,14 +118,23 @@ npx supabase functions deploy send-bill-reminders --use-api
 npx supabase functions deploy delete-account --use-api
 ```
 
+Despliega `delete-account` para habilitar la eliminación de cuentas desde la
+aplicación. Si la app muestra `404 NOT_FOUND`, esa función aún no está
+desplegada en el proyecto vinculado.
+
 Docker no es necesario para vincular el proyecto ni para trabajar contra
 Supabase remoto. Solo hace falta para levantar el stack local de Supabase.
 
 ## Edge Functions y correo
 
 La función [`send-bill-reminders`](supabase/functions/send-bill-reminders/index.ts)
-consulta facturas pendientes, respeta las preferencias del usuario, registra la
-entrega y opcionalmente envía un correo mediante Resend.
+consulta facturas pendientes, respeta los canales configurados en cada factura,
+registra las entregas por canal y envía correos detallados mediante Resend.
+
+La función [`delete-account`](supabase/functions/delete-account/index.ts)
+valida la sesión del usuario, elimina sus datos de la aplicación y luego elimina
+su identidad de Supabase Auth. Debe desplegarse al proyecto para que la opción
+Eliminar cuenta funcione.
 
 Los valores `RESEND_API_KEY` y `MAIL_FROM` se crean en **Supabase → Edge
 Functions → Secrets**. Nunca deben incluirse en archivos Dart, el README,
@@ -132,6 +143,10 @@ GitHub ni capturas de pantalla.
 La función debe ser invocada periódicamente mediante el mecanismo de scheduling
 configurado en Supabase o un servicio externo. Desplegarla por sí solo no crea
 una ejecución automática.
+
+En Android, los recordatorios locales requieren permitir las notificaciones y
+las alarmas exactas en los ajustes del dispositivo. Se vuelven a programar al
+abrir la aplicación, incluyendo las facturas pendientes guardadas previamente.
 
 ## Seguridad
 

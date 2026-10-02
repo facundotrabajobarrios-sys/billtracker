@@ -57,35 +57,35 @@ class AuthService {
 
   // 🔑 Iniciar sesión
   Future<User?> login(String email, String password) async {
-    try {
-      final response = await _client.auth.signInWithPassword(
-        email: email,
-        password: password,
+    final response = await _client.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
+
+    final authUser = response.user;
+    if (authUser == null) return null;
+    if (authUser.emailConfirmedAt == null) {
+      await _client.auth.signOut();
+      throw StateError(
+        'Confirma tu correo electrónico antes de iniciar sesión.',
       );
+    }
 
-      if (response.user != null) {
-        if (response.user!.emailConfirmedAt == null) {
-          await _client.auth.signOut();
-          return null;
-        }
-        await _ensureProfile(response.user!);
-        final userData = await _client
-            .from('users')
-            .select()
-            .eq('id', response.user!.id)
-            .single();
+    try {
+      await _ensureProfile(authUser);
+      final userData = await _client
+          .from('users')
+          .select()
+          .eq('id', authUser.id)
+          .single();
 
-        final user = User.fromJson(userData);
-
-        // ✅ Guardar sesión
-        await _saveSession(user);
-        await AuditLogService().record('login');
-        return user;
-      }
-      return null;
-    } catch (e) {
-      print('❌ Error en login: $e');
-      return null;
+      final user = User.fromJson(userData);
+      await _saveSession(user);
+      await AuditLogService().record('login');
+      return user;
+    } catch (_) {
+      await _client.auth.signOut();
+      rethrow;
     }
   }
 
@@ -142,20 +142,13 @@ class AuthService {
 
   // 🔑 Recuperar contraseña
   Future<bool> resetPassword(String email) async {
-    try {
-      await _client.auth.resetPasswordForEmail(
-        email,
-        redirectTo: kIsWeb
-            ? SupabaseConfig.webPasswordRecoveryUri
-            : SupabaseConfig.mobileCallbackUri,
-      );
-      // This action is intentionally not logged here because no authenticated
-      // user exists when a password reset is requested.
-      return true;
-    } catch (e) {
-      print('❌ Error al enviar correo de recuperación: $e');
-      return false;
-    }
+    await _client.auth.resetPasswordForEmail(
+      email,
+      redirectTo: kIsWeb
+          ? SupabaseConfig.webPasswordRecoveryUri
+          : SupabaseConfig.mobileCallbackUri,
+    );
+    return true;
   }
 
   Future<void> updatePassword(String password) async {
@@ -164,9 +157,9 @@ class AuthService {
   }
 
   Future<void> deleteAccount() async {
-    await AuditLogService().record('account_deleted');
     await _client.functions.invoke('delete-account');
-    await logout();
+    await _client.auth.signOut(scope: supabase.SignOutScope.local);
+    await _clearSession();
   }
 
   // 💾 Guardar sesión en SharedPreferences

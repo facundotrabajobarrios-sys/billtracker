@@ -118,6 +118,23 @@ class _HomeContentState extends State<_HomeContent> {
 
         final bills = await _billService.getBills(userId);
         _allBills = bills;
+        try {
+          await PushNotificationService().reconcileBillReminders(bills);
+        } catch (error) {
+          debugPrint(
+            'No se pudieron restaurar los recordatorios locales: $error',
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'No se pudieron activar los recordatorios del dispositivo: '
+                  '$error',
+                ),
+              ),
+            );
+          }
+        }
       } catch (e) {
         print('❌ Error cargando datos: $e');
       }
@@ -135,14 +152,25 @@ class _HomeContentState extends State<_HomeContent> {
   }
 
   List<Bill> get _filteredBills {
+    final startDate = DateTime(
+      _startDate.year,
+      _startDate.month,
+      _startDate.day,
+    );
+    final endDate = DateTime(_endDate.year, _endDate.month, _endDate.day);
+
+    bool isWithinRange(DateTime date) {
+      final dateOnly = DateTime(date.year, date.month, date.day);
+      return !dateOnly.isBefore(startDate) && !dateOnly.isAfter(endDate);
+    }
+
     return _allBills.where((b) {
-      final due = b.dueDate;
-      final inRange =
-          (due.isAtSameMomentAs(_startDate) || due.isAfter(_startDate)) &&
-          (due.isAtSameMomentAs(_endDate) || due.isBefore(_endDate));
+      final dueDateInRange = isWithinRange(b.dueDate);
+      final paidDateInRange =
+          b.isPaid && b.paidDate != null && isWithinRange(b.paidDate!);
       final matchesCategory =
           _selectedCategory == null || b.category?.name == _selectedCategory;
-      return inRange && matchesCategory;
+      return (dueDateInRange || paidDateInRange) && matchesCategory;
     }).toList()..sort((a, b) => a.dueDate.compareTo(b.dueDate));
   }
 

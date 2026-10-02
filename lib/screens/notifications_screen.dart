@@ -14,6 +14,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   final _notificationService = NotificationService();
   List<NotificationModel> _notifications = [];
   bool _isLoading = true;
+  String? _loadError;
 
   @override
   void initState() {
@@ -29,16 +30,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       setState(() => _isLoading = true);
     }
 
-    final freshNotifications = await _notificationService.getNotifications(
-      null,
-    );
-    if (!mounted) return;
-    setState(() {
-      _notifications = freshNotifications;
-    });
-
-    if (!mounted) return;
-    setState(() => _isLoading = false);
+    try {
+      final freshNotifications = await _notificationService.getNotifications(
+        null,
+      );
+      if (!mounted) return;
+      setState(() {
+        _notifications = freshNotifications;
+        _loadError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _loadError = error.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   // ✅ Marcar como leída
@@ -143,6 +149,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         backgroundColor: Colors.white,
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
+            : _loadError != null
+            ? _buildErrorState()
             : _notifications.isEmpty
             ? _buildEmptyState()
             : ListView.builder(
@@ -209,6 +217,46 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 },
               ),
       ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.65,
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.cloud_off, size: 56, color: Colors.orange),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'No se pudieron cargar las notificaciones',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 18),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _loadError!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _loadNotifications,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Reintentar'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

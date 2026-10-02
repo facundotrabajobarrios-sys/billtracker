@@ -4,7 +4,6 @@ import '../providers/auth_provider.dart';
 import 'register_screen.dart';
 import 'reset_password_screen.dart';
 import 'home_screen.dart';
-import '../utils/validators.dart';
 
 // 🔐 Pantalla de Login
 class LoginScreen extends StatefulWidget {
@@ -32,7 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final authProvider = context.read<AuthProvider>();
       final success = await authProvider.login(
         _emailController.text.trim(),
-        _passwordController.text.trim(),
+        _passwordController.text,
       );
 
       if (success && mounted) {
@@ -43,8 +42,10 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('❌ Email o contraseña incorrectos'),
+          SnackBar(
+            content: Text(
+              '❌ ${authProvider.loginError ?? 'Email o contraseña incorrectos'}',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -127,7 +128,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       if (value == null || value.isEmpty) {
                         return 'Ingresa tu contraseña';
                       }
-                      return PasswordRules.validate(value);
+                      return null;
                     },
                   ),
                   const SizedBox(height: 24),

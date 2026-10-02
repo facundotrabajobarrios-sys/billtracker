@@ -91,6 +91,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
     if (bill.description != null) {
       _descriptionController.text = bill.description!;
     }
+    _setReminderTimeFields();
   }
 
   void _setReminderTimeFields() {
@@ -476,10 +477,52 @@ class _AddBillScreenState extends State<AddBillScreen> {
                       activeThumbColor: Colors.green,
                     ),
 
-                    // 🔔 Recordatorio
+                    // 🔔 Configuración de recordatorios
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Canales de recordatorio',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    if (_supportsPushNotifications)
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Notificación push'),
+                        subtitle: const Text(
+                          'Alerta local en este dispositivo móvil',
+                        ),
+                        value: _reminderPushEnabled,
+                        onChanged: (value) =>
+                            setState(() => _reminderPushEnabled = value),
+                      ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Correo electrónico'),
+                      subtitle: const Text(
+                        'Se enviará al correo asociado a tu cuenta',
+                      ),
+                      value: _reminderEmailEnabled,
+                      onChanged: (value) =>
+                          setState(() => _reminderEmailEnabled = value),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Bandeja de BillTracker'),
+                      subtitle: const Text(
+                        'Guardar la alerta en tus notificaciones',
+                      ),
+                      value: _reminderInAppEnabled,
+                      onChanged: (value) =>
+                          setState(() => _reminderInAppEnabled = value),
+                    ),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Text('Recordatorio: '),
+                        const Text('Anticipación: '),
                         Expanded(
                           child: Slider(
                             value: _reminderDays.toDouble(),

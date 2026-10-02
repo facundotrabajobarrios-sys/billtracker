@@ -84,12 +84,19 @@ class _BillsScreenState extends State<BillsScreen> {
   Future<void> _markAsPaid(Bill bill) async {
     final userId = context.read<AuthProvider>().user?.id;
     final gamificationProvider = context.read<GamificationProvider>();
-    final previousBadges =
-        gamificationProvider.gamification?.unlockedBadges ?? [];
+    if (userId != null) {
+      await gamificationProvider.loadGamification(userId, silent: true);
+    }
+    final previousBadges = List<String>.from(
+      gamificationProvider.gamification?.unlockedBadges ?? const [],
+    );
 
     final updated = await _billService.markAsPaidWithGamification(bill.id);
 
     if (updated != null && userId != null) {
+      await PushNotificationService().cancelNotification(
+        PushNotificationService().generateId(bill.id),
+      );
       await gamificationProvider.loadGamification(userId, silent: true);
       if (!mounted) return;
       final currentBadges =

@@ -95,6 +95,16 @@ La tabla `audit_logs`:
 Si la tabla ya fue creada manualmente en Supabase, la migración es idempotente y
 puede utilizarse para mantener la configuración versionada.
 
+La migración
+[`supabase/migrations/202609300001_bill_notification_channels.sql`](supabase/migrations/202609300001_bill_notification_channels.sql)
+guarda los canales y la hora UTC de recordatorio de cada factura, y programa la
+Edge Function cada minuto mediante Supabase Cron.
+
+Antes de aplicar esta migración, crea en **Supabase → Database → Vault** un
+secreto llamado `billtracker_service_role_key` con el valor de la clave JWT
+`service_role` del proyecto. La clave queda en Vault y no se guarda en el
+repositorio ni en Flutter. La migración se detiene si el secreto no existe.
+
 ## Supabase CLI
 
 Instalación local de la CLI:
@@ -115,6 +125,7 @@ Desplegar las funciones:
 
 ```powershell
 npx supabase functions deploy send-bill-reminders --use-api
+npx supabase functions deploy send-test-notification --use-api
 npx supabase functions deploy delete-account --use-api
 ```
 
@@ -140,9 +151,21 @@ Los valores `RESEND_API_KEY` y `MAIL_FROM` se crean en **Supabase → Edge
 Functions → Secrets**. Nunca deben incluirse en archivos Dart, el README,
 GitHub ni capturas de pantalla.
 
-La función debe ser invocada periódicamente mediante el mecanismo de scheduling
-configurado en Supabase o un servicio externo. Desplegarla por sí solo no crea
-una ejecución automática.
+El cron invoca la función cada minuto. El usuario configura anticipación de 1 a
+10 días y una hora local; la aplicación convierte el instante a UTC. El correo
+se envía a la dirección asociada a la cuenta, que puede ser Gmail. En móvil, el
+canal push es una notificación local del dispositivo; la web no implementa push
+de navegador.
+
+La función procesa el correo y la bandeja como canales independientes: un
+problema de Resend no impide crear la notificación interna. Los recordatorios
+fallidos se reintentan durante las siguientes 24 horas; cada canal registra su
+propia entrega para evitar repetir los que sí tuvieron éxito.
+
+La función `send-test-notification` valida la sesión autenticada y envía un
+correo de prueba a la dirección de la cuenta actual. La notificación interna se
+guarda en `notifications`; en Android/iOS se muestra además una notificación
+local inmediata. La versión web no implementa push del navegador.
 
 En Android, los recordatorios locales requieren permitir las notificaciones y
 las alarmas exactas en los ajustes del dispositivo. Se vuelven a programar al

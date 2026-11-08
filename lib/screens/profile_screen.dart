@@ -1,6 +1,6 @@
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
@@ -92,6 +92,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _pickedImage = image;
         _previewBytes = bytes;
       });
+    } on MissingPluginException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            kIsWeb
+                ? 'Se actualizó el selector de fotos. Recarga la página y vuelve a intentarlo.'
+                : 'No se pudo abrir la galería. Reinicia la aplicación y vuelve a intentarlo.',
+          ),
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

@@ -199,6 +199,14 @@ class AuthService {
     return true;
   }
 
+  Future<void> resendSignupConfirmation(String email) async {
+    await _client.auth.resend(
+      type: supabase.OtpType.signup,
+      email: email.trim(),
+      emailRedirectTo: SupabaseConfig.authRedirectUri,
+    );
+  }
+
   Future<void> updatePassword(String password) async {
     await _client.auth.updateUser(supabase.UserAttributes(password: password));
     await AuditLogService().record('password_changed');

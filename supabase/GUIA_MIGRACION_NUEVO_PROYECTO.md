@@ -137,6 +137,28 @@ Si quieres enviar correos de autenticación a usuarios reales, configura tambié
 un SMTP válido en Supabase Auth; el secreto Resend de las Edge Functions no
 configura por sí solo el SMTP de Auth.
 
+En **Authentication → Email Templates**, configura los enlaces para que la app
+pueda validarlos aunque el usuario abra el correo en otro navegador o
+dispositivo. En **Confirm signup**, usa un enlace con el token hash:
+
+```html
+<a href="https://facundotrabajobarrios-sys.github.io/billtracker/auth/callback?token_hash={{ .TokenHash }}&type=signup">
+  Confirmar correo
+</a>
+```
+
+En **Reset password**, usa:
+
+```html
+<a href="https://facundotrabajobarrios-sys.github.io/billtracker/auth/reset-password?token_hash={{ .TokenHash }}&type=recovery">
+  Cambiar contraseña
+</a>
+```
+
+Los dos destinos deben permanecer en la lista de Redirect URLs permitidas.
+Los enlaces son de un solo uso y caducan según el tiempo configurado en Auth;
+si un enlace vence o ya se utilizó, solicita uno nuevo.
+
 ## 5. Desplegar las Edge Functions y configurar secretos
 
 Las fuentes están en `supabase/functions/` y la copia del backup en

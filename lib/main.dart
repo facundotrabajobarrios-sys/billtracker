@@ -22,11 +22,12 @@ import 'utils/app_theme.dart';
 import 'utils/app_navigator.dart';
 
 bool _initialPasswordRecoveryLink = false;
+String? _webAuthError;
 
 Future<void> _exchangeWebAuthCode() async {
-  if (!kIsWeb ||
-      (!Uri.base.path.endsWith('/auth/callback') &&
-          !Uri.base.path.endsWith('/auth/reset-password'))) {
+  final isCallbackRoute = Uri.base.path.endsWith('/auth/callback');
+  final isRecoveryRoute = Uri.base.path.endsWith('/auth/reset-password');
+  if (!kIsWeb || (!isCallbackRoute && !isRecoveryRoute)) {
     return;
   }
 
@@ -36,34 +37,82 @@ Future<void> _exchangeWebAuthCode() async {
         : Uri.splitQueryString(Uri.base.fragment);
     final parameters = {...Uri.base.queryParameters, ...fragment};
     final auth = Supabase.instance.client.auth;
-    final code = parameters['code'];
-    if (code != null) {
-      final response = await auth.exchangeCodeForSession(code);
-      if (response.redirectType == AuthChangeEvent.passwordRecovery.name ||
-          parameters['type'] == 'recovery') {
-        _initialPasswordRecoveryLink = true;
-      }
+    final linkError = parameters['error_description'] ?? parameters['error'];
+    if (linkError != null) {
+      _webAuthError = linkError;
       return;
     }
 
     final tokenHash = parameters['token_hash'];
-    if (parameters['type'] == 'recovery' && tokenHash != null) {
-      await auth.verifyOTP(tokenHash: tokenHash, type: OtpType.recovery);
-      _initialPasswordRecoveryLink = true;
+    final linkType = parameters['type'];
+    if (tokenHash != null) {
+      if (linkType != 'recovery' && linkType != 'signup') {
+        _webAuthError = 'El tipo de enlace de autenticación no es válido.';
+        return;
+      }
+      await auth.verifyOTP(
+        tokenHash: tokenHash,
+        type: linkType == 'recovery' ? OtpType.recovery : OtpType.signup,
+      );
+      _initialPasswordRecoveryLink = linkType == 'recovery';
+      if (isRecoveryRoute &&
+          (!_initialPasswordRecoveryLink || auth.currentSession == null)) {
+        _webAuthError =
+            'No se pudo validar el enlace de recuperación. Solicita uno nuevo.';
+      }
+      return;
+    }
+
+    final code = parameters['code'];
+    if (code != null) {
+      final response = await auth.exchangeCodeForSession(code);
+      if (response.redirectType == AuthChangeEvent.passwordRecovery.name ||
+          linkType == 'recovery') {
+        _initialPasswordRecoveryLink = true;
+      }
+      if (isRecoveryRoute &&
+          (!_initialPasswordRecoveryLink || auth.currentSession == null)) {
+        _webAuthError =
+            'No se pudo validar el enlace de recuperación. Solicita uno nuevo.';
+      }
       return;
     }
 
     final accessToken = parameters['access_token'];
     final refreshToken = parameters['refresh_token'];
-    if (parameters['type'] == 'recovery' &&
-        accessToken != null &&
-        refreshToken != null) {
+    if (linkType == 'recovery' && accessToken != null && refreshToken != null) {
       await auth.setSession(refreshToken, accessToken: accessToken);
-      _initialPasswordRecoveryLink = true;
+      _initialPasswordRecoveryLink = auth.currentSession != null;
+      if (!_initialPasswordRecoveryLink) {
+        _webAuthError =
+            'No se pudo validar el enlace de recuperación. Solicita uno nuevo.';
+      }
+      return;
+    }
+
+    if (isRecoveryRoute || isCallbackRoute) {
+      _webAuthError =
+          'El enlace no contiene una verificación válida. Solicita uno nuevo.';
     }
   } catch (error) {
     debugPrint('Error procesando el enlace de recuperación: $error');
+    _webAuthError = error is AuthException
+        ? _friendlyAuthError(error.message)
+        : 'No se pudo validar el enlace. Puede haber vencido o ya haber sido utilizado.';
   }
+}
+
+String _friendlyAuthError(String message) {
+  final normalized = message.toLowerCase();
+  if (normalized.contains('expired') ||
+      normalized.contains('invalid') ||
+      normalized.contains('otp')) {
+    return 'El enlace no es válido o ya venció. Solicita un enlace nuevo y ábrelo una sola vez.';
+  }
+  if (normalized.contains('code verifier')) {
+    return 'No se encontró la verificación de este navegador. Solicita un enlace nuevo y ábrelo en el mismo navegador donde comenzaste el proceso.';
+  }
+  return message;
 }
 
 Future<void> main() async {
@@ -198,6 +247,9 @@ class MyApp extends StatelessWidget {
               kIsWeb && Uri.base.path.endsWith('/auth/callback');
           final bool isWebPasswordRecovery =
               kIsWeb && Uri.base.path.endsWith('/auth/reset-password');
+          final bool hasRecoverySession =
+              Supabase.instance.client.auth.currentSession != null &&
+              authProvider.isPasswordRecovery;
 
           return MaterialApp(
             navigatorKey: navigatorKey,
@@ -207,12 +259,19 @@ class MyApp extends StatelessWidget {
             themeMode: themeProvider.isDarkMode
                 ? ThemeMode.dark
                 : ThemeMode.light,
-            home:
-                authProvider.isPasswordRecovery ||
-                    (isWebPasswordRecovery && !isAuth)
+            home: hasRecoverySession
                 ? const UpdatePasswordScreen()
+                : isWebPasswordRecovery
+                ? AuthCallbackScreen(
+                    isRecovery: true,
+                    processingError:
+                        _webAuthError ??
+                        'El enlace no se validó. Solicita uno nuevo para cambiar tu contraseña.',
+                  )
                 : isWebCallback
-                ? const AuthCallbackScreen()
+                ? AuthCallbackScreen(processingError: _webAuthError)
+                : authProvider.isPasswordRecovery
+                ? const UpdatePasswordScreen()
                 : isAuth
                 ? const AuthenticatedHomeScreen()
                 : const LoginScreen(),
@@ -220,7 +279,14 @@ class MyApp extends StatelessWidget {
               '/login': (context) => const LoginScreen(),
               '/home': (context) => const AuthenticatedHomeScreen(),
               '/reset-password': (context) => const ResetPasswordScreen(),
-              '/update-password': (context) => const UpdatePasswordScreen(),
+              '/update-password': (context) =>
+                  hasRecoverySession || authProvider.isPasswordRecovery
+                  ? const UpdatePasswordScreen()
+                  : const AuthCallbackScreen(
+                      isRecovery: true,
+                      processingError:
+                          'No hay una sesión de recuperación válida. Solicita un enlace nuevo.',
+                    ),
               '/notifications': (context) => const NotificationsScreen(),
               '/bill-detail': (context) {
                 final bill =

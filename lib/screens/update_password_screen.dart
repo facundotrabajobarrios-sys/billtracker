@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../providers/auth_provider.dart';
+import 'auth_callback_screen.dart';
 import 'login_screen.dart';
 import '../utils/validators.dart';
 import '../widgets/password_strength_indicator.dart';
@@ -54,6 +56,17 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    if (!_isLoading &&
+        (Supabase.instance.client.auth.currentSession == null ||
+            !auth.isPasswordRecovery)) {
+      return const AuthCallbackScreen(
+        isRecovery: true,
+        processingError:
+            'No hay una sesión de recuperación válida. Solicita un enlace nuevo para cambiar tu contraseña.',
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text('Cambiar contraseña')),
       body: Center(

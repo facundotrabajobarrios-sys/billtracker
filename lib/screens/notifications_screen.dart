@@ -104,6 +104,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Colors.orange;
       case 'reminder':
         return Colors.blue;
+      case 'announcement':
+        return Colors.deepPurple;
       default:
         return Colors.grey;
     }
@@ -118,6 +120,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.warning;
       case 'reminder':
         return Icons.notifications_active;
+      case 'announcement':
+        return Icons.campaign_outlined;
       default:
         return Icons.info;
     }

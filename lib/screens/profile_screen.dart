@@ -20,11 +20,15 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  final _profileFormKey = GlobalKey<FormState>();
   final _billService = BillService();
   final _imagePicker = ImagePicker();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
   int _totalBills = 0;
   bool _isLoading = true;
   bool _isSavingAvatar = false;
+  bool _isSavingProfile = false;
   Uint8List? _previewBytes;
   XFile? _pickedImage;
   String? _loadError;
@@ -32,7 +36,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    final user = context.read<AuthProvider>().user;
+    _nameController.text = user?.name ?? '';
+    _emailController.text = user?.email ?? '';
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -161,6 +175,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo eliminar la foto: $error')),
       );
+    }
+  }
+
+  Future<void> _saveProfile() async {
+    if (!_profileFormKey.currentState!.validate()) return;
+    setState(() => _isSavingProfile = true);
+    try {
+      final result = await context.read<AuthProvider>().updateProfile(
+        name: _nameController.text,
+        email: _emailController.text,
+      );
+      if (!mounted) return;
+      if (!result.emailConfirmationPending) {
+        await context.read<AuthProvider>().loadUser();
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.emailConfirmationPending
+                ? 'Nombre actualizado. Confirma el nuevo correo desde el mensaje que enviamos; el correo del perfil cambiará después de confirmarlo.'
+                : 'Perfil actualizado correctamente.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo actualizar el perfil: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _isSavingProfile = false);
     }
   }
 
@@ -324,6 +370,77 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ),
                             ),
                           ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Form(
+                          key: _profileFormKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Datos personales',
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: _nameController,
+                                maxLength: 100,
+                                decoration: const InputDecoration(
+                                  labelText: 'Nombre completo',
+                                  prefixIcon: Icon(Icons.person_outline),
+                                ),
+                                validator: (value) {
+                                  final name = value?.trim() ?? '';
+                                  if (name.isEmpty) return 'Ingresa tu nombre.';
+                                  if (name.length > 100) {
+                                    return 'El nombre no puede superar 100 caracteres.';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              TextFormField(
+                                controller: _emailController,
+                                keyboardType: TextInputType.emailAddress,
+                                decoration: const InputDecoration(
+                                  labelText: 'Correo electrónico',
+                                  prefixIcon: Icon(Icons.email_outlined),
+                                ),
+                                validator: (value) {
+                                  final email = value?.trim() ?? '';
+                                  return RegExp(
+                                        r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
+                                      ).hasMatch(email)
+                                      ? null
+                                      : 'Ingresa un correo válido.';
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: FilledButton.icon(
+                                  onPressed: _isSavingProfile
+                                      ? null
+                                      : _saveProfile,
+                                  icon: _isSavingProfile
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(Icons.save_outlined),
+                                  label: const Text('Guardar datos'),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

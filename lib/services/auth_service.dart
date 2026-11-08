@@ -110,10 +110,16 @@ class AuthService {
   Future<void> _ensureProfile(supabase.User authUser, {String? name}) async {
     final existing = await _client
         .from('users')
-        .select('id')
+        .select('id,email')
         .eq('id', authUser.id)
         .maybeSingle();
     if (existing != null) {
+      if (authUser.email != null && existing['email'] != authUser.email) {
+        await _client
+            .from('users')
+            .update({'email': authUser.email})
+            .eq('id', authUser.id);
+      }
       return;
     }
     await _client.from('users').insert({

@@ -46,11 +46,16 @@ class User {
     );
   }
 
-  User copyWith({String? avatarUrl, bool clearAvatarUrl = false}) {
+  User copyWith({
+    String? email,
+    String? name,
+    String? avatarUrl,
+    bool clearAvatarUrl = false,
+  }) {
     return User(
       id: id,
-      email: email,
-      name: name,
+      email: email ?? this.email,
+      name: name ?? this.name,
       level: level,
       points: points,
       createdAt: createdAt,

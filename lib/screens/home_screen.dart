@@ -12,6 +12,7 @@ import 'package:printing/printing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../providers/auth_provider.dart';
+import '../providers/gamification_provider.dart';
 import '../services/bill_service.dart';
 import '../services/notification_service.dart';
 import '../services/push_notification_service.dart';
@@ -254,6 +255,7 @@ class _HomeContentState extends State<_HomeContent> {
   int _unreadCount = 0;
   String? _loadError;
   String? _systemAnnouncement;
+  List<Map<String, dynamic>> _activeAnnouncements = [];
 
   // Filtros: por defecto últimos 30 días
   late DateTime _startDate;
@@ -284,6 +286,13 @@ class _HomeContentState extends State<_HomeContent> {
     } catch (error) {
       debugPrint('No se pudo cargar el aviso del sistema: $error');
     }
+    try {
+      final announcements = await _notiService.getActiveAnnouncements();
+      if (!mounted) return;
+      setState(() => _activeAnnouncements = announcements);
+    } catch (error) {
+      debugPrint('No se pudieron cargar los comunicados: $error');
+    }
   }
 
   Future<void> _loadData() async {
@@ -296,6 +305,10 @@ class _HomeContentState extends State<_HomeContent> {
     final userId = context.read<AuthProvider>().user?.id;
     if (userId != null) {
       try {
+        await context.read<GamificationProvider>().loadGamification(
+          userId,
+          silent: true,
+        );
         final summary = await _billService.getSummary(userId);
         _pending = summary['pending'] ?? 0;
         _paid = summary['paid'] ?? 0;
@@ -740,6 +753,7 @@ class _HomeContentState extends State<_HomeContent> {
             onPressed: () {
               _loadData();
               _loadUnreadCount();
+              _loadSystemAnnouncement();
             },
             tooltip: 'Actualizar',
           ),
@@ -753,6 +767,7 @@ class _HomeContentState extends State<_HomeContent> {
               onRefresh: () async {
                 await _loadData();
                 await _loadUnreadCount();
+                await _loadSystemAnnouncement();
               },
               // Usar ListView para evitar BottomOverflow y permitir desplazamiento
               child: Center(
@@ -822,6 +837,59 @@ class _HomeContentState extends State<_HomeContent> {
                                 ),
                               ],
                             ),
+                          ),
+                        ),
+                      ],
+                      for (final announcement in _activeAnnouncements) ...[
+                        const SizedBox(height: 12),
+                        Card(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.secondaryContainer,
+                          child: ListTile(
+                            leading: Icon(
+                              Icons.campaign_outlined,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSecondaryContainer,
+                            ),
+                            title: Text(announcement['title'] as String? ?? ''),
+                            subtitle: Text(
+                              announcement['message'] as String? ?? '',
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: announcement['is_read'] == true
+                                ? null
+                                : const Icon(Icons.fiber_new_outlined),
+                            onTap: announcement['is_read'] == true
+                                ? null
+                                : () async {
+                                    final id = announcement['id'] as String?;
+                                    if (id == null) return;
+                                    final read = await _notiService.markAsRead(
+                                      id,
+                                    );
+                                    if (!mounted || !context.mounted) return;
+                                    if (read) {
+                                      setState(() {
+                                        announcement['is_read'] = true;
+                                        if (_unreadCount > 0) {
+                                          _unreadCount--;
+                                        }
+                                      });
+                                    } else {
+                                      ScaffoldMessenger.of(context)
+                                        ..hideCurrentSnackBar()
+                                        ..showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'No se pudo marcar el comunicado como leído.',
+                                            ),
+                                          ),
+                                        );
+                                    }
+                                  },
                           ),
                         ),
                       ],
@@ -905,6 +973,75 @@ class _HomeContentState extends State<_HomeContent> {
                                 width,
                               ),
                             ],
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 20),
+
+                      Consumer<GamificationProvider>(
+                        builder: (context, gamificationProvider, _) {
+                          final gamification =
+                              gamificationProvider.gamification;
+                          if (gamification == null) {
+                            return const SizedBox.shrink();
+                          }
+                          return Card(
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const AchievementsScreen(),
+                                ),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(18),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.emoji_events_outlined,
+                                      size: 32,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Tus logros',
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.titleMedium,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            '${gamification.unlockedBadges.length} insignias · ${gamification.streakDays} pagos puntuales consecutivos',
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.bodySmall,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Text(
+                                      '${gamification.totalPoints} pts',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Icon(Icons.chevron_right),
+                                  ],
+                                ),
+                              ),
+                            ),
                           );
                         },
                       ),

@@ -12,12 +12,18 @@ consultar el comportamiento de los gastos.
 - Recordatorios configurables por factura: correo y bandeja interna en la web y
   móvil; notificación local en Android/iOS. La web no solicita permisos push.
 - Panel con resúmenes, gráficos y exportación a PDF o CSV.
-- Puntos, niveles e insignias por pagos realizados a tiempo.
+- Puntos, niveles e insignias reconciliados con las facturas pagadas.
+- Perfil editable con fotografía, nombre y correo electrónico.
+- Panel administrativo para gestionar cuentas, facturas, servicios,
+  categorías, avisos y comunicados.
+- Notificaciones internas y correos para comunicados, con caducidad de 24 horas
+  en el panel principal.
 - Eliminación de cuenta desde la aplicación.
 - Registro de auditoría por usuario en `public.audit_logs`.
 
-La aplicación utiliza un único perfil funcional: usuario final. No se implementan
-roles administrativos ni perfiles alternativos.
+El panel administrativo requiere un usuario registrado en `public.admin_roles`.
+Las operaciones administrativas se validan en Edge Functions y no se conceden
+al usuario final desde el cliente Flutter.
 
 ## Arquitectura
 
@@ -95,6 +101,17 @@ La tabla `audit_logs`:
 Si la tabla ya fue creada manualmente en Supabase, la migración es idempotente y
 puede utilizarse para mantener la configuración versionada.
 
+La migración
+[`supabase/migrations/202611090001_catalog_announcements.sql`](supabase/migrations/202611090001_catalog_announcements.sql)
+habilita el catálogo administrativo, comunicados dirigidos, notificaciones
+internas y la cola de correo. Antes de aplicarla, verifica que esté configurado
+en Supabase Vault el secreto `billtracker_service_role_key` (la migración de
+recordatorios usa el mismo secreto). Configura además `RESEND_API_KEY` y
+`MAIL_FROM` en **Edge Functions → Secrets** para habilitar los correos.
+
+Los comunicados se conservan en el historial; solo se muestran en el dashboard
+durante sus primeras 24 horas, calculadas con la hora del servidor.
+
 Para crear un proyecto Supabase nuevo a partir de un backup, sigue la
 [guía de migración a otro proyecto](supabase/GUIA_MIGRACION_NUEVO_PROYECTO.md).
 
@@ -130,6 +147,8 @@ Desplegar las funciones:
 npx supabase functions deploy send-bill-reminders --use-api
 npx supabase functions deploy send-test-notification --use-api
 npx supabase functions deploy delete-account --use-api
+npx supabase functions deploy admin-api --use-api
+npx supabase functions deploy send-announcement-emails --use-api
 ```
 
 Despliega `delete-account` para habilitar la eliminación de cuentas desde la

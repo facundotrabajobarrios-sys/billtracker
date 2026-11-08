@@ -39,8 +39,7 @@ class _AdminScreenState extends State<AdminScreen> {
     ('Resumen', Icons.space_dashboard_outlined),
     ('Usuarios', Icons.people_outline),
     ('Facturas', Icons.receipt_long_outlined),
-    ('Auditoría', Icons.history_outlined),
-    ('Sistema', Icons.tune_outlined),
+    ('Gestión', Icons.tune_outlined),
   ];
   int _selectedIndex = 0;
   bool _loggingOut = false;
@@ -66,9 +65,7 @@ class _AdminScreenState extends State<AdminScreen> {
       case 2:
         return const _AdminBillsScreen();
       case 3:
-        return const _AdminAuditScreen();
-      case 4:
-        return const _AdminSettingsScreen();
+        return const _AdminManagementScreen();
       default:
         return const _AdminDashboard();
     }
@@ -488,38 +485,171 @@ class _AdminUsersScreenState extends State<_AdminUsersScreen> {
     }
   }
 
-  Future<void> _editName(Map<String, dynamic> user) async {
-    final controller = TextEditingController(
-      text: user['name'] as String? ?? '',
+  Future<void> _editUser([Map<String, dynamic>? user]) async {
+    final nameController = TextEditingController(
+      text: user?['name'] as String? ?? '',
     );
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Editar nombre'),
-        content: TextField(
-          controller: controller,
-          maxLength: 100,
-          decoration: const InputDecoration(labelText: 'Nombre'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
+    final emailController = TextEditingController(
+      text: user?['email'] as String? ?? '',
     );
-    controller.dispose();
-    if (name == null || name.isEmpty) return;
+    final passwordController = TextEditingController();
+    var role = user?['isAdmin'] == true ? 'admin' : 'user';
+    var saving = false;
+    final canChangeRole =
+        user == null || user['id'] != context.read<AuthProvider>().user?.id;
+    Map<String, dynamic>? result;
     try {
-      await _service.updateUserName(user['id'] as String, name);
+      result = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: Text(user == null ? 'Crear usuario' : 'Editar usuario'),
+            content: SizedBox(
+              width: 440,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      maxLength: 100,
+                      decoration: const InputDecoration(labelText: 'Nombre'),
+                    ),
+                    TextField(
+                      controller: emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(labelText: 'Correo'),
+                    ),
+                    if (user == null)
+                      TextField(
+                        controller: passwordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Contraseña temporal (opcional)',
+                          helperText:
+                              'Si se deja vacía, el sistema generará una segura.',
+                        ),
+                      ),
+                    if (canChangeRole)
+                      DropdownButtonFormField<String>(
+                        initialValue: role,
+                        decoration: const InputDecoration(labelText: 'Rol'),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'user',
+                            child: Text('Usuario'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'admin',
+                            child: Text('Administrador'),
+                          ),
+                        ],
+                        onChanged: saving
+                            ? null
+                            : (value) {
+                                if (value != null) {
+                                  setDialogState(() => role = value);
+                                }
+                              },
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: saving ? null : () => Navigator.pop(dialogContext),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        final name = nameController.text.trim();
+                        final email = emailController.text.trim();
+                        if (name.isEmpty ||
+                            name.length > 100 ||
+                            !RegExp(
+                              r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
+                            ).hasMatch(email)) {
+                          _showMessage('Ingresa un nombre y correo válidos.');
+                          return;
+                        }
+                        setDialogState(() => saving = true);
+                        try {
+                          if (user == null) {
+                            final created = await _service.createUser(
+                              name: name,
+                              email: email,
+                              role: role,
+                              temporaryPassword: passwordController.text.isEmpty
+                                  ? null
+                                  : passwordController.text,
+                            );
+                            if (dialogContext.mounted) {
+                              Navigator.pop(dialogContext, {
+                                ...created,
+                                'created': true,
+                              });
+                            }
+                          } else {
+                            await _service.updateUser(
+                              userId: user['id'] as String,
+                              name: name,
+                              email: email,
+                              role: canChangeRole ? role : null,
+                            );
+                            if (dialogContext.mounted) {
+                              Navigator.pop(dialogContext, {'created': false});
+                            }
+                          }
+                        } catch (error) {
+                          _showMessage('No se pudo guardar el usuario: $error');
+                          setDialogState(() => saving = false);
+                        }
+                      },
+                child: saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(user == null ? 'Crear' : 'Guardar'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (result == null) return;
       await _load();
+      if (result['created'] == true && mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Usuario creado'),
+            content: SelectableText(
+              'Cuenta: ${result!['email']}\n'
+              'Contraseña temporal: ${result['temporaryPassword']}\n\n'
+              'Guárdala y compártela con el usuario por un canal seguro. '
+              'No volverá a mostrarse.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cerrar'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        _showMessage('Usuario actualizado correctamente.');
+      }
     } catch (error) {
-      _showMessage('No se pudo actualizar el nombre: $error');
+      _showMessage('No se pudo guardar el usuario: $error');
+    } finally {
+      nameController.dispose();
+      emailController.dispose();
+      passwordController.dispose();
     }
   }
 
@@ -670,6 +800,11 @@ class _AdminUsersScreenState extends State<_AdminUsersScreen> {
                   },
                 ),
               ),
+              IconButton(
+                tooltip: 'Crear usuario',
+                onPressed: _loading ? null : () => _editUser(),
+                icon: const Icon(Icons.person_add_alt_1_outlined),
+              ),
               const SizedBox(width: 8),
               PopupMenuButton<String>(
                 tooltip: 'Ordenar',
@@ -720,7 +855,10 @@ class _AdminUsersScreenState extends State<_AdminUsersScreen> {
                           ),
                           title: Text(user['name'] as String? ?? 'Usuario'),
                           subtitle: Text(
-                            '${user['email'] ?? ''}\nRegistro: ${_formatDate(user['created_at'])} · ${active ? 'Activo' : 'Desactivado'}',
+                            '${user['email'] ?? ''}\n'
+                            '${user['isAdmin'] == true ? 'Administrador' : 'Usuario'} · '
+                            'Registro: ${_formatDate(user['created_at'])} · '
+                            '${active ? 'Activo' : 'Desactivado'}',
                           ),
                           isThreeLine: true,
                           trailing: _deletingUserIds.contains(user['id'])
@@ -740,7 +878,7 @@ class _AdminUsersScreenState extends State<_AdminUsersScreen> {
                                       case 'details':
                                         _details(user);
                                       case 'edit':
-                                        _editName(user);
+                                        _editUser(user);
                                       case 'toggle':
                                         _toggleActive(user);
                                       case 'delete':
@@ -754,7 +892,7 @@ class _AdminUsersScreenState extends State<_AdminUsersScreen> {
                                     ),
                                     const PopupMenuItem(
                                       value: 'edit',
-                                      child: Text('Editar nombre'),
+                                      child: Text('Editar usuario'),
                                     ),
                                     PopupMenuItem(
                                       value: 'toggle',
@@ -1235,6 +1373,672 @@ class _AdminSettingsScreenState extends State<_AdminSettingsScreen> {
   }
 }
 
+class _AdminManagementScreen extends StatelessWidget {
+  const _AdminManagementScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 4,
+      child: Column(
+        children: [
+          const Material(
+            child: TabBar(
+              isScrollable: true,
+              tabs: [
+                Tab(text: 'Aviso del sistema', icon: Icon(Icons.info_outline)),
+                Tab(text: 'Catálogo', icon: Icon(Icons.category_outlined)),
+                Tab(text: 'Comunicados', icon: Icon(Icons.campaign_outlined)),
+                Tab(text: 'Auditoría', icon: Icon(Icons.history_outlined)),
+              ],
+            ),
+          ),
+          const Expanded(
+            child: TabBarView(
+              children: [
+                _AdminSettingsScreen(),
+                _AdminCatalogScreen(),
+                _AdminAnnouncementsScreen(),
+                _AdminAuditScreen(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminCatalogScreen extends StatefulWidget {
+  const _AdminCatalogScreen();
+
+  @override
+  State<_AdminCatalogScreen> createState() => _AdminCatalogScreenState();
+}
+
+class _AdminCatalogScreenState extends State<_AdminCatalogScreen> {
+  final _service = AdminService();
+  List<Map<String, dynamic>> _services = [];
+  List<Map<String, dynamic>> _categories = [];
+  bool _showServices = true;
+  bool _loading = true;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final results = await Future.wait([
+        _service.getCatalog('service'),
+        _service.getCatalog('category'),
+      ]);
+      _services = results[0];
+      _categories = results[1];
+    } catch (error) {
+      _error = error;
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _editItem([String? entity, Map<String, dynamic>? item]) async {
+    final selectedEntity = entity ?? (_showServices ? 'service' : 'category');
+    final name = TextEditingController(text: item?['name'] as String? ?? '');
+    final description = TextEditingController(
+      text: item?['description'] as String? ?? '',
+    );
+    final price = TextEditingController(text: item?['price']?.toString() ?? '');
+    final icon = TextEditingController(text: item?['icon'] as String? ?? '');
+    final color = TextEditingController(
+      text: item?['color'] as String? ?? '#3D7A6B',
+    );
+    var categoryId = item?['category_id'] as String?;
+    var isActive = item?['is_active'] != false;
+    var saving = false;
+    try {
+      final saved = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: Text(
+              item == null
+                  ? 'Crear ${selectedEntity == 'service' ? 'servicio' : 'categoría'}'
+                  : 'Editar ${selectedEntity == 'service' ? 'servicio' : 'categoría'}',
+            ),
+            content: SizedBox(
+              width: 440,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: name,
+                      maxLength: 100,
+                      decoration: const InputDecoration(labelText: 'Nombre'),
+                    ),
+                    TextField(
+                      controller: description,
+                      maxLength: 1000,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Descripción',
+                      ),
+                    ),
+                    if (selectedEntity == 'service') ...[
+                      TextField(
+                        controller: price,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Precio de referencia (opcional)',
+                        ),
+                      ),
+                      DropdownButtonFormField<String?>(
+                        initialValue: categoryId,
+                        decoration: const InputDecoration(
+                          labelText: 'Categoría',
+                        ),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('Sin categoría'),
+                          ),
+                          for (final category in _categories.where(
+                            (entry) => entry['is_active'] != false,
+                          ))
+                            DropdownMenuItem<String?>(
+                              value: category['id'] as String,
+                              child: Text(category['name'] as String),
+                            ),
+                        ],
+                        onChanged: (value) =>
+                            setDialogState(() => categoryId = value),
+                      ),
+                    ] else ...[
+                      TextField(
+                        controller: icon,
+                        maxLength: 20,
+                        decoration: const InputDecoration(
+                          labelText: 'Icono o emoji (opcional)',
+                        ),
+                      ),
+                      TextField(
+                        controller: color,
+                        decoration: const InputDecoration(
+                          labelText: 'Color hexadecimal',
+                          hintText: '#3D7A6B',
+                        ),
+                      ),
+                    ],
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Activo'),
+                      value: isActive,
+                      onChanged: (value) =>
+                          setDialogState(() => isActive = value),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: saving
+                    ? null
+                    : () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        if (name.text.trim().isEmpty) {
+                          ScaffoldMessenger.of(this.context).showSnackBar(
+                            const SnackBar(
+                              content: Text('El nombre es obligatorio.'),
+                            ),
+                          );
+                          return;
+                        }
+                        setDialogState(() => saving = true);
+                        try {
+                          await _service.saveCatalogItem(
+                            entity: selectedEntity,
+                            id: item?['id'] as String?,
+                            name: name.text.trim(),
+                            description: description.text.trim(),
+                            isActive: isActive,
+                            icon: selectedEntity == 'category'
+                                ? icon.text.trim()
+                                : null,
+                            color: selectedEntity == 'category'
+                                ? color.text.trim()
+                                : null,
+                            categoryId: selectedEntity == 'service'
+                                ? categoryId
+                                : null,
+                            price: selectedEntity == 'service'
+                                ? price.text.trim()
+                                : null,
+                          );
+                          if (dialogContext.mounted) {
+                            Navigator.pop(dialogContext, true);
+                          }
+                        } catch (error) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'No se pudo guardar el elemento: $error',
+                                ),
+                              ),
+                            );
+                          }
+                          setDialogState(() => saving = false);
+                        }
+                      },
+                child: saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Guardar'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (saved == true) {
+        await _load();
+        _message('Elemento del catálogo guardado correctamente.');
+      }
+    } finally {
+      name.dispose();
+      description.dispose();
+      price.dispose();
+      icon.dispose();
+      color.dispose();
+    }
+  }
+
+  Future<void> _setActive(String entity, Map<String, dynamic> item) async {
+    try {
+      await _service.setCatalogItemActive(
+        entity: entity,
+        id: item['id'] as String,
+        isActive: item['is_active'] == false,
+      );
+      await _load();
+    } catch (error) {
+      _message('No se pudo cambiar el estado: $error');
+    }
+  }
+
+  Future<void> _delete(String entity, Map<String, dynamic> item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar elemento'),
+        content: Text(
+          '¿Eliminar "${item['name']}"? Si está asociado a facturas, primero debes desactivarlo.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _service.deleteCatalogItem(
+        entity: entity,
+        id: item['id'] as String,
+      );
+      await _load();
+      _message('Elemento eliminado correctamente.');
+    } catch (error) {
+      _message('No se pudo eliminar: $error');
+    }
+  }
+
+  void _message(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entity = _showServices ? 'service' : 'category';
+    final items = _showServices ? _services : _categories;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(
+                    value: true,
+                    label: Text('Servicios'),
+                    icon: Icon(Icons.receipt_long_outlined),
+                  ),
+                  ButtonSegment(
+                    value: false,
+                    label: Text('Categorías'),
+                    icon: Icon(Icons.category_outlined),
+                  ),
+                ],
+                selected: {_showServices},
+                onSelectionChanged: (value) =>
+                    setState(() => _showServices = value.first),
+              ),
+              const Spacer(),
+              FilledButton.icon(
+                onPressed: _loading ? null : () => _editItem(),
+                icon: const Icon(Icons.add),
+                label: const Text('Agregar'),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _error != null
+              ? _AdminError(error: _error, onRetry: _load)
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: items.isEmpty
+                      ? ListView(
+                          children: const [
+                            SizedBox(height: 100),
+                            Center(
+                              child: Text('No hay elementos en el catálogo.'),
+                            ),
+                          ],
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: items.length,
+                          itemBuilder: (context, index) {
+                            final item = items[index];
+                            final active = item['is_active'] != false;
+                            final details = selectedEntityDescription(
+                              _showServices,
+                              item,
+                            );
+                            return Card(
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  child: Icon(
+                                    _showServices
+                                        ? Icons.receipt_long_outlined
+                                        : Icons.category_outlined,
+                                  ),
+                                ),
+                                title: Text(item['name'] as String? ?? ''),
+                                subtitle: Text(
+                                  '$details · ${active ? 'Activo' : 'Inactivo'}',
+                                ),
+                                isThreeLine: true,
+                                trailing: PopupMenuButton<String>(
+                                  onSelected: (action) {
+                                    if (action == 'edit') {
+                                      _editItem(entity, item);
+                                    } else if (action == 'toggle') {
+                                      _setActive(entity, item);
+                                    } else {
+                                      _delete(entity, item);
+                                    }
+                                  },
+                                  itemBuilder: (_) => [
+                                    const PopupMenuItem(
+                                      value: 'edit',
+                                      child: Text('Editar'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'toggle',
+                                      child: Text(
+                                        active ? 'Desactivar' : 'Activar',
+                                      ),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'delete',
+                                      child: Text('Eliminar'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  String selectedEntityDescription(bool isService, Map<String, dynamic> item) {
+    if (!isService) return item['description'] as String? ?? 'Categoría';
+    final price = item['price'];
+    final category = _categories.cast<Map<String, dynamic>?>().firstWhere(
+      (entry) => entry?['id'] == item['category_id'],
+      orElse: () => null,
+    );
+    final pieces = <String>[
+      if (price != null) 'Precio: $price',
+      if (category != null) 'Categoría: ${category['name']}',
+      if ((item['description'] as String?)?.isNotEmpty == true)
+        item['description'] as String,
+    ];
+    return pieces.isEmpty ? 'Servicio' : pieces.join(' · ');
+  }
+}
+
+class _AdminAnnouncementsScreen extends StatefulWidget {
+  const _AdminAnnouncementsScreen();
+
+  @override
+  State<_AdminAnnouncementsScreen> createState() =>
+      _AdminAnnouncementsScreenState();
+}
+
+class _AdminAnnouncementsScreenState extends State<_AdminAnnouncementsScreen> {
+  final _service = AdminService();
+  final _title = TextEditingController();
+  final _message = TextEditingController();
+  List<Map<String, dynamic>> _users = [];
+  List<Map<String, dynamic>> _announcements = [];
+  final Set<String> _selectedUsers = {};
+  bool _allUsers = true;
+  bool _loading = true;
+  bool _publishing = false;
+  Object? _error;
+  String _userSearch = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _message.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final results = await Future.wait([
+        _service.getRecipientUsers(),
+        _service.getAnnouncements(),
+      ]);
+      _users = results[0];
+      _announcements = results[1];
+      _selectedUsers.removeWhere(
+        (id) => !_users.any((user) => user['id'] == id),
+      );
+    } catch (error) {
+      _error = error;
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _publish() async {
+    if (_title.text.trim().isEmpty || _message.text.trim().isEmpty) {
+      _showMessage('Completa el título y el mensaje.');
+      return;
+    }
+    if (!_allUsers && _selectedUsers.isEmpty) {
+      _showMessage('Selecciona al menos un destinatario.');
+      return;
+    }
+    setState(() => _publishing = true);
+    try {
+      await _service.publishAnnouncement(
+        title: _title.text.trim(),
+        message: _message.text.trim(),
+        allUsers: _allUsers,
+        userIds: _selectedUsers.toList(),
+      );
+      _title.clear();
+      _message.clear();
+      await _load();
+      _showMessage('Comunicado publicado y notificaciones creadas.');
+    } catch (error) {
+      _showMessage('No se pudo publicar el comunicado: $error');
+    } finally {
+      if (mounted) setState(() => _publishing = false);
+    }
+  }
+
+  void _showMessage(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error != null) return _AdminError(error: _error, onRetry: _load);
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    final filteredUsers = _users.where((user) {
+      final needle = _userSearch.trim().toLowerCase();
+      if (needle.isEmpty) return true;
+      return '${user['name'] ?? ''} ${user['email'] ?? ''}'
+          .toLowerCase()
+          .contains(needle);
+    }).toList();
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            'Publicar comunicado',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _title,
+            maxLength: 120,
+            decoration: const InputDecoration(labelText: 'Título'),
+          ),
+          TextField(
+            controller: _message,
+            maxLength: 5000,
+            minLines: 3,
+            maxLines: 6,
+            decoration: const InputDecoration(
+              labelText: 'Mensaje',
+              alignLabelWithHint: true,
+            ),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Enviar a todos los usuarios'),
+            value: _allUsers,
+            onChanged: (value) => setState(() => _allUsers = value),
+          ),
+          if (!_allUsers) ...[
+            TextField(
+              decoration: const InputDecoration(
+                labelText: 'Buscar destinatarios',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (value) => setState(() => _userSearch = value),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 260,
+              child: Card(
+                child: filteredUsers.isEmpty
+                    ? const Center(child: Text('No hay usuarios coincidentes.'))
+                    : ListView.builder(
+                        itemCount: filteredUsers.length,
+                        itemBuilder: (context, index) {
+                          final user = filteredUsers[index];
+                          final id = user['id'] as String;
+                          return CheckboxListTile(
+                            value: _selectedUsers.contains(id),
+                            title: Text(user['name'] as String? ?? 'Usuario'),
+                            subtitle: Text(user['email'] as String? ?? ''),
+                            onChanged: (selected) => setState(() {
+                              if (selected == true) {
+                                _selectedUsers.add(id);
+                              } else {
+                                _selectedUsers.remove(id);
+                              }
+                            }),
+                          );
+                        },
+                      ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '${_selectedUsers.length} destinatario(s) elegido(s)',
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              onPressed: _publishing ? null : _publish,
+              icon: _publishing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.send_outlined),
+              label: const Text('Publicar y notificar'),
+            ),
+          ),
+          const Divider(height: 36),
+          Text(
+            'Historial de comunicados',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          if (_announcements.isEmpty)
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('Todavía no se han publicado comunicados.'),
+              ),
+            ),
+          for (final announcement in _announcements)
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.campaign_outlined),
+                title: Text(announcement['title'] as String? ?? ''),
+                subtitle: Text(
+                  '${announcement['message'] ?? ''}\n'
+                  '${_formatDate(announcement['published_at'])} · '
+                  '${announcement['recipient_count'] ?? 0} destinatarios · '
+                  'Correo: ${announcement['emailSent'] ?? 0} enviados, '
+                  '${announcement['emailPending'] ?? 0} pendientes, '
+                  '${announcement['emailFailed'] ?? 0} fallidos',
+                ),
+                isThreeLine: true,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MetricCard extends StatelessWidget {
   const _MetricCard({
     required this.label,
@@ -1345,10 +2149,17 @@ String _formatDate(Object? value) {
 String _auditAction(String action) => switch (action) {
   'initial_password_changed' => 'Contraseña inicial cambiada',
   'user_name_updated' => 'Nombre de usuario actualizado',
+  'user_updated' => 'Datos o rol de usuario actualizados',
+  'user_created' => 'Usuario creado',
   'user_enabled' => 'Cuenta de usuario activada',
   'user_disabled' => 'Cuenta de usuario desactivada',
   'user_deleted' => 'Cuenta y datos de usuario eliminados',
   'bill_updated' => 'Factura modificada',
   'system_announcement_updated' => 'Aviso del sistema actualizado',
+  'catalog_item_created' => 'Elemento de catálogo creado',
+  'catalog_item_updated' => 'Elemento de catálogo modificado',
+  'catalog_item_deleted' => 'Elemento de catálogo eliminado',
+  'catalog_item_status_changed' => 'Estado de catálogo modificado',
+  'announcement_published' => 'Comunicado publicado',
   _ => action,
 };

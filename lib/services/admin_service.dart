@@ -43,13 +43,25 @@ class AdminService {
     String search = '',
     String sortBy = 'created_at',
     bool ascending = false,
+    int pageSize = 25,
   }) => _invoke('users', {
     'page': page,
-    'pageSize': 25,
+    'pageSize': pageSize,
     'search': search,
     'sortBy': sortBy,
     'ascending': ascending,
   });
+
+  Future<List<Map<String, dynamic>>> getRecipientUsers() async {
+    final result = await _invoke('recipient_users');
+    final rows = result['rows'];
+    if (rows is! List) {
+      throw const FormatException(
+        'Respuesta inválida al cargar destinatarios.',
+      );
+    }
+    return rows.whereType<Map>().map(Map<String, dynamic>.from).toList();
+  }
 
   Future<Map<String, dynamic>> getUserDetails(String userId) =>
       _invoke('user_details', {'userId': userId});
@@ -68,6 +80,33 @@ class AdminService {
   Future<void> updateUserName(String userId, String name) async {
     await _invoke('update_user', {'userId': userId, 'name': name});
   }
+
+  Future<void> updateUser({
+    required String userId,
+    String? name,
+    String? email,
+    String? role,
+  }) async {
+    await _invoke('update_user', {
+      'userId': userId,
+      if (name != null) 'name': name,
+      if (email != null) 'email': email,
+      if (role != null) 'role': role,
+    });
+  }
+
+  Future<Map<String, dynamic>> createUser({
+    required String name,
+    required String email,
+    required String role,
+    String? temporaryPassword,
+  }) => _invoke('create_user', {
+    'name': name,
+    'email': email,
+    'role': role,
+    if (temporaryPassword != null && temporaryPassword.isNotEmpty)
+      'temporaryPassword': temporaryPassword,
+  });
 
   Future<void> setUserActive(String userId, bool isActive) async {
     await _invoke('set_user_active', {'userId': userId, 'isActive': isActive});
@@ -97,6 +136,79 @@ class AdminService {
 
   Future<void> updateAnnouncement(String announcement) async {
     await _invoke('update_settings', {'announcement': announcement});
+  }
+
+  Future<List<Map<String, dynamic>>> getCatalog(String entity) async {
+    final result = await _invoke('catalog', {'entity': entity});
+    final rows = result['rows'];
+    if (rows is! List) {
+      throw const FormatException('Respuesta inválida al cargar el catálogo.');
+    }
+    return rows.whereType<Map>().map(Map<String, dynamic>.from).toList();
+  }
+
+  Future<void> saveCatalogItem({
+    required String entity,
+    String? id,
+    required String name,
+    String? description,
+    bool isActive = true,
+    String? icon,
+    String? color,
+    String? categoryId,
+    String? price,
+  }) async {
+    await _invoke('save_catalog_item', {
+      'entity': entity,
+      if (id != null) 'id': id,
+      'name': name,
+      'description': description,
+      'isActive': isActive,
+      if (icon != null) 'icon': icon,
+      if (color != null) 'color': color,
+      if (categoryId != null) 'categoryId': categoryId,
+      if (price != null) 'price': price,
+    });
+  }
+
+  Future<void> setCatalogItemActive({
+    required String entity,
+    required String id,
+    required bool isActive,
+  }) async {
+    await _invoke('set_catalog_item_active', {
+      'entity': entity,
+      'id': id,
+      'isActive': isActive,
+    });
+  }
+
+  Future<void> deleteCatalogItem({
+    required String entity,
+    required String id,
+  }) async {
+    await _invoke('delete_catalog_item', {'entity': entity, 'id': id});
+  }
+
+  Future<Map<String, dynamic>> publishAnnouncement({
+    required String title,
+    required String message,
+    required bool allUsers,
+    List<String> userIds = const [],
+  }) => _invoke('publish_announcement', {
+    'title': title,
+    'message': message,
+    'recipientMode': allUsers ? 'all' : 'selected',
+    if (!allUsers) 'userIds': userIds,
+  });
+
+  Future<List<Map<String, dynamic>>> getAnnouncements() async {
+    final result = await _invoke('announcements');
+    final rows = result['rows'];
+    if (rows is! List) {
+      throw const FormatException('Respuesta inválida al cargar comunicados.');
+    }
+    return rows.whereType<Map>().map(Map<String, dynamic>.from).toList();
   }
 }
 

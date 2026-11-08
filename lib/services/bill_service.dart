@@ -214,6 +214,7 @@ class BillService {
           })
           .eq('id', billId)
           .eq('user_id', userId)
+          .neq('status', 'paid')
           .select('''
             *,
             services (
@@ -264,7 +265,10 @@ class BillService {
   // 📥 Obtener servicios (para el selector)
   Future<List<Map<String, dynamic>>> getServices() async {
     try {
-      final response = await client.from('services').select();
+      final response = await client
+          .from('services')
+          .select()
+          .eq('is_active', true);
       if (response is List) {
         return List<Map<String, dynamic>>.from(response);
       }
@@ -298,7 +302,10 @@ class BillService {
   // 📥 Obtener categorías (para el selector)
   Future<List<Map<String, dynamic>>> getCategories() async {
     try {
-      final response = await client.from('categories').select();
+      final response = await client
+          .from('categories')
+          .select()
+          .eq('is_active', true);
       if (response is List) {
         return List<Map<String, dynamic>>.from(response);
       }
@@ -312,29 +319,20 @@ class BillService {
   // 🏆 Procesar pago con gamificación
   Future<Bill?> markAsPaidWithGamification(String billId) async {
     try {
+      final userId = client.auth.currentUser?.id;
+      if (userId == null) return null;
+      final gamificationService = GamificationService();
+      final oldGamification = await gamificationService.getGamification(userId);
+      final oldBadges = oldGamification?.unlockedBadges ?? [];
+
       // 1. Marcar factura como pagada
       final bill = await markAsPaid(billId);
       if (bill == null) return null;
 
-      // 2. Verificar si fue a tiempo
-      final wasOnTime =
-          bill.dueDate.isAfter(DateTime.now()) ||
-          bill.dueDate.isAtSameMomentAs(DateTime.now());
-
-      // 3. Procesar gamificación
-      final gamificationService = GamificationService();
-
-      // Obtener gamificación anterior (para notificaciones)
-      final oldGamification = await gamificationService.getGamification(
-        bill.userId,
-      );
-      final oldBadges = oldGamification?.unlockedBadges ?? [];
-
-      // Procesar pago
+      // Reconciliar todos los pagos para que reintentos no dupliquen premios.
       final updatedGamification = await gamificationService.processPayment(
         bill.userId,
         bill,
-        wasOnTime,
       );
 
       // 4. Notificar nuevas insignias

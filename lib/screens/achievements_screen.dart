@@ -158,7 +158,7 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
                     ),
                     stat(
                       '🔥 Racha',
-                      '${gamification.streakDays} días',
+                      '${gamification.streakDays} pagos',
                       'Pagos consecutivos',
                       Colors.orange,
                     ),

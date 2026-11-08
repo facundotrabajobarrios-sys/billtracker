@@ -11,11 +11,56 @@ class AvatarUpdateResult {
   final bool previousImageRemoved;
 }
 
+class ProfileUpdateResult {
+  const ProfileUpdateResult({required this.emailConfirmationPending});
+
+  final bool emailConfirmationPending;
+}
+
 class ProfileService {
   static const _bucket = 'avatars';
   static const _maxImageBytes = 5 * 1024 * 1024;
 
   SupabaseClient get _client => Supabase.instance.client;
+
+  Future<ProfileUpdateResult> updateProfile({
+    required String name,
+    required String email,
+  }) async {
+    final authUser = _client.auth.currentUser;
+    if (authUser == null) {
+      throw StateError('Inicia sesión para editar tu perfil.');
+    }
+    final cleanName = name.trim();
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanName.isEmpty || cleanName.length > 100) {
+      throw const FormatException(
+        'El nombre debe tener entre 1 y 100 caracteres.',
+      );
+    }
+    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(cleanEmail)) {
+      throw const FormatException('Ingresa un correo electrónico válido.');
+    }
+
+    var emailConfirmationPending = false;
+    if (cleanEmail != authUser.email?.toLowerCase()) {
+      final response = await _client.auth.updateUser(
+        UserAttributes(email: cleanEmail),
+      );
+      emailConfirmationPending = response.user?.newEmail != null;
+    }
+
+    await _client
+        .from('users')
+        .update({'name': cleanName})
+        .eq('id', authUser.id)
+        .select('id')
+        .single();
+
+    return ProfileUpdateResult(
+      emailConfirmationPending: emailConfirmationPending,
+    );
+  }
 
   Future<AvatarUpdateResult> uploadAvatar(
     Uint8List bytes,

@@ -6,6 +6,8 @@ Deploy from this repository with the Supabase CLI:
 supabase functions deploy delete-account
 supabase functions deploy send-bill-reminders
 supabase functions deploy send-test-notification
+supabase functions deploy admin-api
+supabase functions deploy send-announcement-emails
 supabase secrets set RESEND_API_KEY=... MAIL_FROM="BillTracker <onboarding@resend.dev>"
 ```
 
@@ -14,6 +16,13 @@ The `202609300001_bill_notification_channels.sql` migration schedules
 the `billtracker_service_role_key` secret in Supabase Vault. The secret is used
 only by the scheduled database request and must never be committed.
 Never put these secrets in Flutter, GitHub Pages, or the repository.
+
+The `202611090001_catalog_announcements.sql` migration schedules
+`send-announcement-emails` every minute with the same Vault secret. Apply the
+migration only after the Vault secret exists, then deploy both functions.
+`admin-api` validates the signed-in administrator for every operation;
+`send-announcement-emails` accepts only the project service-role credential.
+Set a verified sender in `MAIL_FROM` before sending announcements to real users.
 
 `send-test-notification` requires an authenticated Supabase session and sends a
 single test email to the current user's account email. It uses the same

@@ -77,6 +77,19 @@ class AuthProvider extends ChangeNotifier {
     return result;
   }
 
+  Future<ProfileUpdateResult> updateProfile({
+    required String name,
+    required String email,
+  }) async {
+    final result = await _profileService.updateProfile(
+      name: name,
+      email: email,
+    );
+    _user = _user?.copyWith(name: name.trim());
+    notifyListeners();
+    return result;
+  }
+
   void markPasswordRecovery() {
     _isPasswordRecovery = true;
     _user = null;

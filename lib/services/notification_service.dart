@@ -44,6 +44,16 @@ class NotificationService {
     return response.map((json) => NotificationModel.fromJson(json)).toList();
   }
 
+  Future<List<Map<String, dynamic>>> getActiveAnnouncements() async {
+    final response = await _client.rpc('get_active_announcements');
+    if (response is! List) {
+      throw const FormatException(
+        'La respuesta de comunicados activos no es válida.',
+      );
+    }
+    return response.whereType<Map>().map(Map<String, dynamic>.from).toList();
+  }
+
   Future<List<NotificationModel>> getUnreadNotifications(String? userId) async {
     try {
       final resolvedUserId = userId ?? await _getCurrentUserId();

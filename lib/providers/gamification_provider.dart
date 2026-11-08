@@ -39,18 +39,14 @@ class GamificationProvider extends ChangeNotifier {
     }
   }
 
-  Future<Gamification?> processPayment(
-    String userId,
-    Bill bill,
-    bool wasOnTime,
-  ) async {
+  Future<Gamification?> processPayment(String userId, Bill bill) async {
     _isLoading = true;
     notifyListeners();
 
     try {
       final oldBadges = _gamification?.unlockedBadges ?? [];
 
-      _gamification = await _service.processPayment(userId, bill, wasOnTime);
+      _gamification = await _service.processPayment(userId, bill);
 
       if (_gamification != null) {
         final newBadges = _gamification!.unlockedBadges;

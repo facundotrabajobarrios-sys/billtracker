@@ -6,7 +6,7 @@ class Gamification {
   final String userId;
   final int totalPoints;
   final int currentLevel;
-  final int streakDays; // Días seguidos pagando a tiempo
+  final int streakDays; // Pagos puntuales consecutivos
   final int totalPaidBills;
   final int onTimePayments;
   final List<String> unlockedBadges;

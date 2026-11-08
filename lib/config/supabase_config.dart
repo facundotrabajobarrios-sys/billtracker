@@ -8,6 +8,8 @@ class SupabaseConfig {
   //publishable key
   static const String anonKey =
       'sb_publishable_xencDyrZUxpDheObUKg2Tw_O8OkvraH';
+  static const String adminUsername = 'admin';
+  static const String adminLoginEmail = 'admin@billtracker.invalid';
 
   static const String webCallbackUri =
       'https://facundotrabajobarrios-sys.github.io/billtracker/auth/callback';

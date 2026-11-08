@@ -9,6 +9,9 @@ class User {
   final int? points;
   final DateTime? createdAt;
   final Gamification? gamification;
+  final String? avatarUrl;
+  final bool isAdmin;
+  final bool mustChangePassword;
 
   User({
     required this.id,
@@ -18,6 +21,9 @@ class User {
     this.points = 0,
     this.createdAt,
     this.gamification,
+    this.avatarUrl,
+    this.isAdmin = false,
+    this.mustChangePassword = false,
   });
 
   // 🔄 Crear desde JSON (viene de Supabase)
@@ -31,9 +37,27 @@ class User {
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : null,
+      avatarUrl: json['avatar_url'] as String?,
+      isAdmin: json['is_admin'] == true,
+      mustChangePassword: json['must_change_password'] == true,
       gamification: json['gamification'] != null
           ? Gamification.fromJson(json['gamification'])
           : null,
+    );
+  }
+
+  User copyWith({String? avatarUrl, bool clearAvatarUrl = false}) {
+    return User(
+      id: id,
+      email: email,
+      name: name,
+      level: level,
+      points: points,
+      createdAt: createdAt,
+      gamification: gamification,
+      avatarUrl: clearAvatarUrl ? null : avatarUrl ?? this.avatarUrl,
+      isAdmin: isAdmin,
+      mustChangePassword: mustChangePassword,
     );
   }
 
@@ -46,6 +70,7 @@ class User {
       'level': level,
       'points': points,
       'created_at': createdAt?.toIso8601String(),
+      'avatar_url': avatarUrl,
     };
   }
 }

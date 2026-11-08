@@ -42,9 +42,7 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
       );
       await Future<void>.delayed(const Duration(milliseconds: 700));
       if (!mounted) return;
-      Navigator.of(
-        context,
-      ).pushNamedAndRemoveUntil('/home', (route) => false);
+      Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -59,74 +57,79 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Cambiar contraseña')),
       body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              children: [
-                const Text(
-                  'Escribe tu nueva contraseña',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 24),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: !_showPassword,
-                  decoration: InputDecoration(
-                    labelText: 'Nueva contraseña',
-                    border: OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      tooltip: 'Mostrar contraseña',
-                      icon: Icon(
-                        _showPassword ? Icons.visibility_off : Icons.visibility,
-                      ),
-                      onPressed: () =>
-                          setState(() => _showPassword = !_showPassword),
-                    ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  const Text(
+                    'Escribe tu nueva contraseña',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
-                  validator: PasswordRules.validate,
-                ),
-                const SizedBox(height: 8),
-                ValueListenableBuilder(
-                  valueListenable: _passwordController,
-                  builder: (_, value, __) =>
-                      PasswordStrengthIndicator(password: value.text),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _confirmationController,
-                  obscureText: !_showConfirmation,
-                  decoration: InputDecoration(
-                    labelText: 'Confirmar contraseña',
-                    border: OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      tooltip: 'Mostrar confirmación',
-                      icon: Icon(
-                        _showConfirmation
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                      ),
-                      onPressed: () => setState(
-                        () => _showConfirmation = !_showConfirmation,
+                  const SizedBox(height: 24),
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: !_showPassword,
+                    decoration: InputDecoration(
+                      labelText: 'Nueva contraseña',
+                      border: OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        tooltip: 'Mostrar contraseña',
+                        icon: Icon(
+                          _showPassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                        ),
+                        onPressed: () =>
+                            setState(() => _showPassword = !_showPassword),
                       ),
                     ),
+                    validator: PasswordRules.validate,
                   ),
-                  validator: (value) => value == _passwordController.text
-                      ? null
-                      : 'Las contraseñas no coinciden',
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _updatePassword,
-                    child: _isLoading
-                        ? const CircularProgressIndicator()
-                        : const Text('Guardar contraseña'),
+                  const SizedBox(height: 8),
+                  ValueListenableBuilder(
+                    valueListenable: _passwordController,
+                    builder: (_, value, __) =>
+                        PasswordStrengthIndicator(password: value.text),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _confirmationController,
+                    obscureText: !_showConfirmation,
+                    decoration: InputDecoration(
+                      labelText: 'Confirmar contraseña',
+                      border: OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        tooltip: 'Mostrar confirmación',
+                        icon: Icon(
+                          _showConfirmation
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                        ),
+                        onPressed: () => setState(
+                          () => _showConfirmation = !_showConfirmation,
+                        ),
+                      ),
+                    ),
+                    validator: (value) => value == _passwordController.text
+                        ? null
+                        : 'Las contraseñas no coinciden',
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _updatePassword,
+                      child: _isLoading
+                          ? const CircularProgressIndicator()
+                          : const Text('Guardar contraseña'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

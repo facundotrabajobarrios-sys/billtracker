@@ -95,6 +95,9 @@ La tabla `audit_logs`:
 Si la tabla ya fue creada manualmente en Supabase, la migración es idempotente y
 puede utilizarse para mantener la configuración versionada.
 
+Para crear un proyecto Supabase nuevo a partir de un backup, sigue la
+[guía de migración a otro proyecto](supabase/GUIA_MIGRACION_NUEVO_PROYECTO.md).
+
 La migración
 [`supabase/migrations/202609300001_bill_notification_channels.sql`](supabase/migrations/202609300001_bill_notification_channels.sql)
 guarda los canales y la hora UTC de recordatorio de cada factura, y programa la
@@ -171,6 +174,33 @@ En Android, los recordatorios locales requieren permitir las notificaciones y
 las alarmas exactas en los ajustes del dispositivo. Se vuelven a programar al
 abrir la aplicación, incluyendo las facturas pendientes guardadas previamente.
 
+## Backup manual de la base de datos
+
+El script `scripts/backup-db.js` crea, cuando se solicita, un dump comprimido
+del esquema y los datos de `public` y copia todas las fuentes de
+`supabase/functions/` dentro de una carpeta fechada en `backups/`. No es
+automático ni incluye archivos de Supabase Storage. Los archivos de backup se
+ignoran en Git.
+
+1. Copia `.env.example` a `.env` y configura `SUPABASE_DB_URL` con la cadena de
+   conexión PostgreSQL de **Project Settings → Database**. No compartas ni
+   publiques ese archivo.
+2. Instala PostgreSQL Client Tools y verifica que `pg_dump` esté disponible en
+   `PATH`. Su versión principal debe ser igual o mayor que la versión del
+   servidor Supabase; en Windows el script prefiere la instalación más reciente
+   en `C:\Program Files\PostgreSQL`.
+3. Ejecuta desde la raíz del proyecto:
+
+   ```powershell
+   npm run backup:db
+   ```
+
+Cada ejecución crea `backups/billtracker-<fecha>/` con `database-public.dump` y
+`edge-functions/`. El dump usa formato custom de PostgreSQL y puede restaurarse
+con `pg_restore`. La restauración puede sobrescribir datos: pruébala primero en
+un proyecto Supabase aparte. Este dump no respalda identidades de Supabase Auth,
+objetos de Storage ni secretos configurados en Supabase.
+
 ## Seguridad
 
 - Las contraseñas son gestionadas por Supabase Auth; la aplicación no las guarda
@@ -182,13 +212,6 @@ abrir la aplicación, incluyendo las facturas pendientes guardadas previamente.
   eliminación de cuenta.
 - Los logs de la aplicación no deben contener contraseñas, tokens, claves ni
   información financiera innecesaria.
-
-## Alcance actual
-
-Los backups administrados y la restauración de base de datos quedan fuera del
-alcance de esta versión debido a las limitaciones del plan utilizado. No se
-debe afirmar que existe backup automático si no está configurado en la
-infraestructura.
 
 ## Solución de problemas
 

@@ -21,6 +21,7 @@ class _BillsScreenState extends State<BillsScreen> {
   List<Bill> _bills = [];
   bool _isLoading = true;
   String _filterStatus = 'all';
+  String? _loadError;
 
   @override
   void initState() {
@@ -30,13 +31,18 @@ class _BillsScreenState extends State<BillsScreen> {
 
   // 📥 Cargar facturas
   Future<void> _loadBills() async {
-    setState(() => _isLoading = true);
-
-    final userId = context.read<AuthProvider>().user?.id;
-    if (userId != null) {
-      _bills = await _billService.getBills(userId);
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
+    try {
+      final userId = context.read<AuthProvider>().user?.id;
+      if (userId != null) _bills = await _billService.getBills(userId);
+    } catch (error) {
+      _loadError = 'No se pudieron cargar las facturas: $error';
     }
-
+    if (!mounted) return;
     setState(() => _isLoading = false);
   }
 
@@ -153,8 +159,6 @@ class _BillsScreenState extends State<BillsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mis Facturas'),
-        backgroundColor: Colors.green[700],
-        foregroundColor: Colors.white,
         actions: [
           // 🔄 Botón de recargar (sigue disponible)
           IconButton(
@@ -168,7 +172,7 @@ class _BillsScreenState extends State<BillsScreen> {
         // ✅ PULL-TO-REFRESH
         onRefresh: _loadBills,
         color: Colors.green,
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         child: Column(
           children: [
             // 🔍 Filtros
@@ -193,6 +197,8 @@ class _BillsScreenState extends State<BillsScreen> {
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
+                  : _loadError != null
+                  ? _buildLoadError()
                   : _filteredBills.isEmpty
                   ? _buildEmptyState()
                   : ListView.builder(
@@ -215,12 +221,32 @@ class _BillsScreenState extends State<BillsScreen> {
           );
           if (result == true) _loadBills();
         },
-        backgroundColor: Colors.green[700],
+        backgroundColor: Theme.of(context).colorScheme.primary,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Agregar factura'),
       ),
     );
   }
+
+  Widget _buildLoadError() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.cloud_off_outlined, size: 48),
+          const SizedBox(height: 12),
+          Text(_loadError!, textAlign: TextAlign.center),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: _loadBills,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Reintentar'),
+          ),
+        ],
+      ),
+    ),
+  );
 
   // 🏷️ Chip de filtro
   Widget _buildFilterChip(String label, String value) {
@@ -229,9 +255,9 @@ class _BillsScreenState extends State<BillsScreen> {
       label: Text(label),
       selected: isSelected,
       onSelected: (selected) => setState(() => _filterStatus = value),
-      selectedColor: Colors.green[100],
-      checkmarkColor: Colors.green[700],
-      backgroundColor: Colors.grey[200],
+      selectedColor: Theme.of(context).colorScheme.primaryContainer,
+      checkmarkColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
     );
   }
 
@@ -267,7 +293,7 @@ class _BillsScreenState extends State<BillsScreen> {
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: bill.statusColor.withOpacity(0.2),
+          backgroundColor: bill.statusColor.withValues(alpha: 0.16),
           child: Text(categoryIcon, style: const TextStyle(fontSize: 20)),
         ),
         title: Text(

@@ -1,9 +1,15 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/auth_provider.dart';
 import '../providers/gamification_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/bill_service.dart';
+import '../utils/app_navigator.dart';
+import '../widgets/user_avatar.dart';
 import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -15,8 +21,12 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _billService = BillService();
+  final _imagePicker = ImagePicker();
   int _totalBills = 0;
   bool _isLoading = true;
+  bool _isSavingAvatar = false;
+  Uint8List? _previewBytes;
+  XFile? _pickedImage;
   String? _loadError;
 
   @override
@@ -48,111 +58,355 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _pickAvatar() async {
+    try {
+      final image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1600,
+        maxHeight: 1600,
+      );
+      if (image == null || !mounted) return;
+      final bytes = await image.readAsBytes();
+      if (!mounted) return;
+      if (bytes.length > 5 * 1024 * 1024) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('La imagen debe pesar menos de 5 MB.')),
+        );
+        return;
+      }
+      setState(() {
+        _pickedImage = image;
+        _previewBytes = bytes;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo seleccionar la imagen: $error')),
+      );
+    }
+  }
+
+  Future<void> _saveAvatar() async {
+    final image = _pickedImage;
+    final bytes = _previewBytes;
+    if (image == null || bytes == null) return;
+    setState(() => _isSavingAvatar = true);
+    try {
+      final result = await context.read<AuthProvider>().uploadAvatar(
+        bytes,
+        image.name,
+      );
+      if (!mounted) return;
+      setState(() {
+        _pickedImage = null;
+        _previewBytes = null;
+        _isSavingAvatar = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.previousImageRemoved
+                ? 'Foto de perfil actualizada.'
+                : 'Foto actualizada. No se pudo limpiar la imagen anterior.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isSavingAvatar = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo guardar la foto: $error')),
+      );
+    }
+  }
+
+  Future<void> _deleteAvatar() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Quitar foto de perfil'),
+        content: const Text(
+          'Tu perfil volverá a mostrar la imagen predeterminada.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Quitar foto'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _isSavingAvatar = true);
+    try {
+      final result = await context.read<AuthProvider>().deleteAvatar();
+      if (!mounted) return;
+      setState(() => _isSavingAvatar = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.previousImageRemoved
+                ? 'Foto de perfil eliminada.'
+                : 'Foto eliminada del perfil, pero no se pudo limpiar el archivo.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isSavingAvatar = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo eliminar la foto: $error')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final theme = context.watch<ThemeProvider>();
     final user = auth.user;
     final gamification = context.watch<GamificationProvider>().gamification;
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mi Perfil'),
-        backgroundColor: Colors.green[700],
-        foregroundColor: Colors.white,
+        title: const Text('Mi perfil'),
         actions: [
-          IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh)),
+          IconButton(
+            onPressed: _loadData,
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Actualizar',
+          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                CircleAvatar(
-                  radius: 50,
-                  backgroundColor: Colors.green[100],
-                  child: Text(
-                    user?.name?.isNotEmpty == true
-                        ? user!.name![0].toUpperCase()
-                        : '?',
-                    style: const TextStyle(fontSize: 40, color: Colors.green),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Center(
-                  child: Text(
-                    user?.name ?? 'Usuario',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                Center(child: Text(user?.email ?? '')),
-                const SizedBox(height: 24),
-                Card(
-                  child: SwitchListTile(
-                    secondary: Icon(
-                      theme.isDarkMode ? Icons.dark_mode : Icons.light_mode,
-                    ),
-                    title: const Text('Modo oscuro'),
-                    subtitle: const Text(
-                      'Usar una apariencia oscura en la aplicación',
-                    ),
-                    value: theme.isDarkMode,
-                    onChanged: theme.setDarkMode,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _stat(
-                          'Nivel',
-                          '${gamification?.currentLevel ?? user?.level ?? 0}',
+          : Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: ListView(
+                  padding: const EdgeInsets.all(24),
+                  children: [
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            Stack(
+                              alignment: Alignment.bottomRight,
+                              children: [
+                                _previewBytes == null
+                                    ? UserAvatar(
+                                        name: user?.name,
+                                        imageUrl: user?.avatarUrl,
+                                        radius: 56,
+                                      )
+                                    : CircleAvatar(
+                                        radius: 56,
+                                        backgroundImage: MemoryImage(
+                                          _previewBytes!,
+                                        ),
+                                      ),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.primary,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Theme.of(
+                                        context,
+                                      ).scaffoldBackgroundColor,
+                                      width: 3,
+                                    ),
+                                  ),
+                                  child: IconButton(
+                                    onPressed: _isSavingAvatar
+                                        ? null
+                                        : _pickAvatar,
+                                    icon: const Icon(
+                                      Icons.photo_camera_outlined,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                    tooltip: 'Cambiar foto',
+                                    constraints: const BoxConstraints.tightFor(
+                                      width: 40,
+                                      height: 40,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              user?.name ?? 'Usuario',
+                              style: Theme.of(context).textTheme.headlineSmall
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              user?.email ?? '',
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                            const SizedBox(height: 18),
+                            if (_previewBytes != null)
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                spacing: 12,
+                                runSpacing: 8,
+                                children: [
+                                  OutlinedButton(
+                                    onPressed: _isSavingAvatar
+                                        ? null
+                                        : () => setState(() {
+                                            _pickedImage = null;
+                                            _previewBytes = null;
+                                          }),
+                                    child: const Text('Cancelar'),
+                                  ),
+                                  FilledButton.icon(
+                                    onPressed: _isSavingAvatar
+                                        ? null
+                                        : _saveAvatar,
+                                    icon: _isSavingAvatar
+                                        ? const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(
+                                            Icons.cloud_upload_outlined,
+                                          ),
+                                    label: const Text('Guardar foto'),
+                                  ),
+                                ],
+                              )
+                            else
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                spacing: 8,
+                                children: [
+                                  TextButton.icon(
+                                    onPressed: _pickAvatar,
+                                    icon: const Icon(
+                                      Icons.add_a_photo_outlined,
+                                    ),
+                                    label: const Text('Cambiar foto'),
+                                  ),
+                                  if (user?.avatarUrl != null)
+                                    TextButton.icon(
+                                      onPressed: _isSavingAvatar
+                                          ? null
+                                          : _deleteAvatar,
+                                      icon: const Icon(Icons.delete_outline),
+                                      label: const Text('Quitar foto'),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: colorScheme.error,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'JPG, PNG o WEBP · Máximo 5 MB',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ],
                         ),
-                        _stat(
-                          'Puntos',
-                          '${gamification?.totalPoints ?? user?.points ?? 0}',
-                        ),
-                        _stat('Facturas', '$_totalBills'),
-                      ],
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 16),
+                    Card(
+                      child: SwitchListTile(
+                        secondary: Icon(
+                          theme.isDarkMode
+                              ? Icons.dark_mode_outlined
+                              : Icons.light_mode_outlined,
+                        ),
+                        title: const Text('Modo oscuro'),
+                        subtitle: const Text(
+                          'Personaliza la apariencia de la aplicación',
+                        ),
+                        value: theme.isDarkMode,
+                        onChanged: theme.setDarkMode,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _stat(
+                              context,
+                              'Nivel',
+                              '${gamification?.currentLevel ?? user?.level ?? 0}',
+                            ),
+                            _stat(
+                              context,
+                              'Puntos',
+                              '${gamification?.totalPoints ?? user?.points ?? 0}',
+                            ),
+                            _stat(context, 'Facturas', '$_totalBills'),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    OutlinedButton.icon(
+                      onPressed: user == null ? null : _confirmDeleteAccount,
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('Eliminar cuenta'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: colorScheme.error,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton.tonalIcon(
+                      onPressed: () async {
+                        String? warning;
+                        try {
+                          await auth.logout();
+                        } catch (error) {
+                          warning =
+                              'La sesión local se cerró, pero hubo un problema al invalidarla: $error';
+                        }
+                        returnToLogin(message: warning);
+                      },
+                      icon: const Icon(Icons.logout),
+                      label: const Text('Cerrar sesión'),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  onPressed: user == null ? null : _confirmDeleteAccount,
-                  icon: const Icon(Icons.delete_forever, color: Colors.red),
-                  label: const Text('Eliminar cuenta'),
-                ),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    final navigator = Navigator.of(context);
-                    await auth.logout();
-                    if (!mounted) return;
-                    navigator.pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (_) => const LoginScreen()),
-                      (_) => false,
-                    );
-                  },
-                  icon: const Icon(Icons.logout),
-                  label: const Text('Cerrar Sesión'),
-                ),
-              ],
+              ),
             ),
     );
   }
 
-  Widget _stat(String label, String value) => Column(
+  Widget _stat(BuildContext context, String label, String value) => Column(
     children: [
-      Text(value, style: const TextStyle(fontSize: 24, color: Colors.green)),
-      Text(label),
+      Text(
+        value,
+        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+          color: Theme.of(context).colorScheme.primary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      const SizedBox(height: 4),
+      Text(label, style: Theme.of(context).textTheme.bodySmall),
     ],
   );
 

@@ -1,0 +1,1354 @@
+import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+
+import '../providers/auth_provider.dart';
+import '../services/admin_service.dart';
+import '../widgets/user_avatar.dart';
+import 'admin_password_change_screen.dart';
+import 'home_screen.dart';
+import 'login_screen.dart';
+import '../utils/app_navigator.dart';
+
+class AuthenticatedHomeScreen extends StatelessWidget {
+  const AuthenticatedHomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    if (!auth.isAuthenticated) return const LoginScreen();
+    if (auth.isAdmin) {
+      return auth.mustChangeAdminPassword
+          ? const AdminPasswordChangeScreen()
+          : const AdminScreen();
+    }
+    return const HomeScreen();
+  }
+}
+
+class AdminScreen extends StatefulWidget {
+  const AdminScreen({super.key});
+
+  @override
+  State<AdminScreen> createState() => _AdminScreenState();
+}
+
+class _AdminScreenState extends State<AdminScreen> {
+  static const _sections = [
+    ('Resumen', Icons.space_dashboard_outlined),
+    ('Usuarios', Icons.people_outline),
+    ('Facturas', Icons.receipt_long_outlined),
+    ('Auditoría', Icons.history_outlined),
+    ('Sistema', Icons.tune_outlined),
+  ];
+  int _selectedIndex = 0;
+  bool _loggingOut = false;
+
+  Future<void> _logout() async {
+    if (_loggingOut) return;
+    setState(() => _loggingOut = true);
+    String? warning;
+    try {
+      await context.read<AuthProvider>().logout(revokeAllSessions: true);
+    } catch (error) {
+      warning =
+          'La sesión local se cerró, pero no se pudo revocar todo: $error';
+    }
+    if (mounted) setState(() => _loggingOut = false);
+    returnToLogin(message: warning);
+  }
+
+  Widget _selectedScreen() {
+    switch (_selectedIndex) {
+      case 1:
+        return const _AdminUsersScreen();
+      case 2:
+        return const _AdminBillsScreen();
+      case 3:
+        return const _AdminAuditScreen();
+      case 4:
+        return const _AdminSettingsScreen();
+      default:
+        return const _AdminDashboard();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    if (!auth.isAuthenticated) return const LoginScreen();
+    if (!auth.isAdmin) return const HomeScreen();
+    final wide = MediaQuery.sizeOf(context).width >= 900;
+    final user = auth.user;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(wide ? 'Administración' : _sections[_selectedIndex].$1),
+        actions: [
+          if (user != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Center(
+                child: Text(
+                  user.name ?? 'Admin',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+              ),
+            ),
+          IconButton(
+            tooltip: 'Cerrar sesión',
+            onPressed: _loggingOut ? null : _logout,
+            icon: _loggingOut
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: Row(
+        children: [
+          if (wide)
+            NavigationRail(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (index) =>
+                  setState(() => _selectedIndex = index),
+              labelType: NavigationRailLabelType.all,
+              destinations: [
+                for (final section in _sections)
+                  NavigationRailDestination(
+                    icon: Icon(section.$2),
+                    label: Text(section.$1),
+                  ),
+              ],
+            ),
+          Expanded(child: _selectedScreen()),
+        ],
+      ),
+      bottomNavigationBar: wide
+          ? null
+          : NavigationBar(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (index) =>
+                  setState(() => _selectedIndex = index),
+              destinations: [
+                for (final section in _sections)
+                  NavigationDestination(
+                    icon: Icon(section.$2),
+                    label: section.$1,
+                  ),
+              ],
+            ),
+    );
+  }
+}
+
+class _AdminDashboard extends StatefulWidget {
+  const _AdminDashboard();
+
+  @override
+  State<_AdminDashboard> createState() => _AdminDashboardState();
+}
+
+class _AdminDashboardState extends State<_AdminDashboard> {
+  final _service = AdminService();
+  late Future<Map<String, dynamic>> _data;
+
+  @override
+  void initState() {
+    super.initState();
+    _data = _service.getDashboard();
+  }
+
+  void _reload() => setState(() => _data = _service.getDashboard());
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _data,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _AdminError(error: snapshot.error, onRetry: _reload);
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final data = snapshot.data!;
+        final totalUsers = _asInt(data['totalUsers']);
+        final activeUsers = _asInt(data['activeUsers']);
+        final pending = _asInt(data['pendingBills']);
+        final paid = _asInt(data['paidBills']);
+        final overdue = _asInt(data['overdueBills']);
+        final recent = _asMapList(data['recentUsers']);
+        return RefreshIndicator(
+          onRefresh: () async => _reload(),
+          child: ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Text(
+                'Resumen del sistema',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Datos actuales de usuarios y facturas de BillTracker.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 20),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = constraints.maxWidth >= 900
+                      ? 4
+                      : constraints.maxWidth >= 560
+                      ? 2
+                      : 1;
+                  return GridView.count(
+                    crossAxisCount: columns,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: columns == 1 ? 3.2 : 1.8,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: [
+                      _MetricCard(
+                        label: 'Usuarios registrados',
+                        value: '$totalUsers',
+                        icon: Icons.people_alt_outlined,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      _MetricCard(
+                        label: 'Activos (30 días)',
+                        value: '$activeUsers',
+                        icon: Icons.verified_user_outlined,
+                        color: Colors.teal,
+                      ),
+                      _MetricCard(
+                        label: 'Facturas totales',
+                        value: '${_asInt(data['totalBills'])}',
+                        icon: Icons.receipt_long_outlined,
+                        color: Colors.indigo,
+                      ),
+                      _MetricCard(
+                        label: 'Acciones administrativas',
+                        value: '${_asInt(data['adminActions'])}',
+                        icon: Icons.manage_history_outlined,
+                        color: Colors.deepOrange,
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 20),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Estado de facturas',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        height: 220,
+                        child: BarChart(
+                          BarChartData(
+                            alignment: BarChartAlignment.spaceAround,
+                            maxY:
+                                [
+                                  pending,
+                                  paid,
+                                  overdue,
+                                  1,
+                                ].reduce((a, b) => a > b ? a : b).toDouble() *
+                                1.2,
+                            barTouchData: BarTouchData(enabled: true),
+                            titlesData: FlTitlesData(
+                              topTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+                              rightTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+                              leftTitles: const AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  reservedSize: 36,
+                                ),
+                              ),
+                              bottomTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  getTitlesWidget: (value, _) {
+                                    const labels = [
+                                      'Pendientes',
+                                      'Pagadas',
+                                      'Vencidas',
+                                    ];
+                                    final index = value.toInt();
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: Text(
+                                        index >= 0 && index < labels.length
+                                            ? labels[index]
+                                            : '',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.labelSmall,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            borderData: FlBorderData(show: false),
+                            gridData: const FlGridData(
+                              show: true,
+                              drawVerticalLine: false,
+                            ),
+                            barGroups: [
+                              _bar(0, pending, Colors.orange),
+                              _bar(1, paid, Colors.green),
+                              _bar(2, overdue, Colors.red),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 20,
+                        runSpacing: 8,
+                        children: [
+                          _Legend(
+                            label: 'Pendientes: $pending',
+                            color: Colors.orange,
+                          ),
+                          _Legend(label: 'Pagadas: $paid', color: Colors.green),
+                          _Legend(
+                            label: 'Vencidas: $overdue',
+                            color: Colors.red,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Registros recientes',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              if (recent.isEmpty)
+                const Card(
+                  child: ListTile(
+                    title: Text('Todavía no hay usuarios registrados.'),
+                  ),
+                )
+              else
+                for (final item in recent)
+                  Card(
+                    child: ListTile(
+                      leading: UserAvatar(
+                        name: item['name'] as String?,
+                        imageUrl: item['avatar_url'] as String?,
+                        radius: 21,
+                      ),
+                      title: Text((item['name'] as String?) ?? 'Usuario'),
+                      subtitle: Text((item['email'] as String?) ?? ''),
+                      trailing: Text(_formatDate(item['created_at'])),
+                    ),
+                  ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+BarChartGroupData _bar(int index, int value, Color color) {
+  return BarChartGroupData(
+    x: index,
+    barRods: [
+      BarChartRodData(
+        toY: value.toDouble(),
+        color: color,
+        width: 34,
+        borderRadius: BorderRadius.circular(5),
+      ),
+    ],
+  );
+}
+
+class _AdminUsersScreen extends StatefulWidget {
+  const _AdminUsersScreen();
+
+  @override
+  State<_AdminUsersScreen> createState() => _AdminUsersScreenState();
+}
+
+class _AdminUsersScreenState extends State<_AdminUsersScreen> {
+  final _service = AdminService();
+  final _search = TextEditingController();
+  List<Map<String, dynamic>> _users = [];
+  int _total = 0;
+  int _page = 0;
+  bool _loading = true;
+  Object? _error;
+  String _sort = 'created_at';
+  final Set<String> _deletingUserIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final result = await _service.getUsers(
+        page: _page,
+        search: _search.text,
+        sortBy: _sort,
+      );
+      _users = _asMapList(result['rows']);
+      _total = _asInt(result['total']);
+    } catch (error) {
+      _error = error;
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _details(Map<String, dynamic> user) async {
+    try {
+      final data = await _service.getUserDetails(user['id'] as String);
+      if (!mounted) return;
+      final profile = Map<String, dynamic>.from(data['user'] as Map);
+      final bills = _asMapList(data['bills']);
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text((profile['name'] as String?) ?? 'Detalle del usuario'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Correo: ${profile['email'] ?? '—'}'),
+                  Text('Registro: ${_formatDate(profile['created_at'])}'),
+                  Text(
+                    'Último acceso: ${_formatDate(profile['lastSignInAt'])}',
+                  ),
+                  Text(
+                    'Nivel: ${profile['level'] ?? 0} · Puntos: ${profile['points'] ?? 0}',
+                  ),
+                  const Divider(height: 24),
+                  Text('Facturas registradas (${data['billsTotal'] ?? 0})'),
+                  for (final bill in bills)
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        '${bill['status']} · ${bill['amount']} ${bill['currency'] ?? ''}',
+                      ),
+                      subtitle: Text('Vence ${_formatDate(bill['due_date'])}'),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (mounted) _showMessage('No se pudieron cargar los detalles: $error');
+    }
+  }
+
+  Future<void> _editName(Map<String, dynamic> user) async {
+    final controller = TextEditingController(
+      text: user['name'] as String? ?? '',
+    );
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Editar nombre'),
+        content: TextField(
+          controller: controller,
+          maxLength: 100,
+          decoration: const InputDecoration(labelText: 'Nombre'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.isEmpty) return;
+    try {
+      await _service.updateUserName(user['id'] as String, name);
+      await _load();
+    } catch (error) {
+      _showMessage('No se pudo actualizar el nombre: $error');
+    }
+  }
+
+  Future<void> _toggleActive(Map<String, dynamic> user) async {
+    final isActive = user['isActive'] != true;
+    final confirmed = await _confirm(
+      isActive ? 'Activar cuenta' : 'Desactivar cuenta',
+      '¿Confirmas que quieres ${isActive ? 'activar' : 'desactivar'} la cuenta de ${user['email']}?',
+    );
+    if (!confirmed) return;
+    try {
+      await _service.setUserActive(user['id'] as String, isActive);
+      await _load();
+    } catch (error) {
+      _showMessage('No se pudo cambiar el estado de la cuenta: $error');
+    }
+  }
+
+  Future<void> _delete(Map<String, dynamic> user) async {
+    final userId = user['id'] as String;
+    if (_deletingUserIds.contains(userId)) return;
+    final confirmed = await _confirm(
+      'Eliminar cuenta y datos',
+      'Esta acción eliminará la cuenta y sus facturas. No se puede deshacer. ¿Continuar?',
+    );
+    if (!confirmed) return;
+    if (mounted) setState(() => _deletingUserIds.add(userId));
+    try {
+      await _service.deleteUser(userId);
+      if (!mounted) return;
+      setState(() {
+        _users.removeWhere((item) => item['id'] == userId);
+        if (_total > 0) _total--;
+      });
+      _showMessage('Usuario eliminado correctamente.');
+      await _refreshAfterDelete();
+    } catch (error) {
+      await _reconcileDeleteError(userId, error);
+    } finally {
+      if (mounted) setState(() => _deletingUserIds.remove(userId));
+    }
+  }
+
+  Future<void> _reconcileDeleteError(String userId, Object deleteError) async {
+    try {
+      final result = await _service.getUsers(
+        page: _page,
+        search: _search.text,
+        sortBy: _sort,
+      );
+      if (!mounted) return;
+      final users = _asMapList(result['rows']);
+      final stillExists = users.any((user) => user['id'] == userId);
+      setState(() {
+        _users = users;
+        _total = _asInt(result['total']);
+        _error = null;
+      });
+      _showMessage(
+        stillExists
+            ? 'No se pudo eliminar la cuenta: $deleteError'
+            : 'Usuario eliminado correctamente.',
+      );
+    } catch (refreshError) {
+      _showMessage(
+        'No se pudo confirmar la eliminación: $deleteError. '
+        'Tampoco se pudo actualizar la lista: $refreshError',
+      );
+    }
+  }
+
+  Future<void> _refreshAfterDelete() async {
+    try {
+      final result = await _service.getUsers(
+        page: _page,
+        search: _search.text,
+        sortBy: _sort,
+      );
+      if (!mounted) return;
+      setState(() {
+        _users = _asMapList(result['rows']);
+        _total = _asInt(result['total']);
+        _error = null;
+      });
+    } catch (error) {
+      _showMessage(
+        'El usuario fue eliminado, pero no se pudo actualizar la lista: $error',
+      );
+    }
+  }
+
+  Future<bool> _confirm(String title, String message) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(title),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Confirmar'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error != null) return _AdminError(error: _error, onRetry: _load);
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _search,
+                  decoration: InputDecoration(
+                    hintText: 'Buscar nombre o correo',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: IconButton(
+                      tooltip: 'Buscar',
+                      onPressed: () {
+                        _page = 0;
+                        _load();
+                      },
+                      icon: const Icon(Icons.arrow_forward),
+                    ),
+                  ),
+                  onSubmitted: (_) {
+                    _page = 0;
+                    _load();
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              PopupMenuButton<String>(
+                tooltip: 'Ordenar',
+                initialValue: _sort,
+                onSelected: (value) {
+                  setState(() => _sort = value);
+                  _load();
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'created_at', child: Text('Registro')),
+                  PopupMenuItem(value: 'name', child: Text('Nombre')),
+                  PopupMenuItem(value: 'email', child: Text('Correo')),
+                ],
+                icon: const Icon(Icons.sort),
+              ),
+            ],
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            child: Text('$_total usuarios'),
+          ),
+        ),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _users.isEmpty
+              ? const Center(child: Text('No se encontraron usuarios.'))
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                    itemCount: _users.length,
+                    itemBuilder: (context, index) {
+                      final user = _users[index];
+                      final active = user['isActive'] == true;
+                      return Card(
+                        child: ListTile(
+                          onTap: _deletingUserIds.contains(user['id'])
+                              ? null
+                              : () => _details(user),
+                          leading: UserAvatar(
+                            name: user['name'] as String?,
+                            imageUrl: user['avatar_url'] as String?,
+                            radius: 22,
+                          ),
+                          title: Text(user['name'] as String? ?? 'Usuario'),
+                          subtitle: Text(
+                            '${user['email'] ?? ''}\nRegistro: ${_formatDate(user['created_at'])} · ${active ? 'Activo' : 'Desactivado'}',
+                          ),
+                          isThreeLine: true,
+                          trailing: _deletingUserIds.contains(user['id'])
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                )
+                              : PopupMenuButton<String>(
+                                  onSelected: (action) {
+                                    switch (action) {
+                                      case 'details':
+                                        _details(user);
+                                      case 'edit':
+                                        _editName(user);
+                                      case 'toggle':
+                                        _toggleActive(user);
+                                      case 'delete':
+                                        _delete(user);
+                                    }
+                                  },
+                                  itemBuilder: (_) => [
+                                    const PopupMenuItem(
+                                      value: 'details',
+                                      child: Text('Ver actividad'),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'edit',
+                                      child: Text('Editar nombre'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'toggle',
+                                      child: Text(
+                                        active ? 'Desactivar' : 'Activar',
+                                      ),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'delete',
+                                      child: Text('Eliminar cuenta y datos'),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                onPressed: _page == 0 || _loading
+                    ? null
+                    : () {
+                        setState(() => _page--);
+                        _load();
+                      },
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Text('Página ${_page + 1}'),
+              IconButton(
+                onPressed: (_page + 1) * 25 >= _total || _loading
+                    ? null
+                    : () {
+                        setState(() => _page++);
+                        _load();
+                      },
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AdminBillsScreen extends StatefulWidget {
+  const _AdminBillsScreen();
+
+  @override
+  State<_AdminBillsScreen> createState() => _AdminBillsScreenState();
+}
+
+class _AdminBillsScreenState extends State<_AdminBillsScreen> {
+  final _service = AdminService();
+  final _search = TextEditingController();
+  List<Map<String, dynamic>> _bills = [];
+  String _status = '';
+  bool _loading = true;
+  Object? _error;
+  int _page = 0;
+  int _total = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final result = await _service.getBills(
+        page: _page,
+        search: _search.text,
+        status: _status,
+      );
+      _bills = _asMapList(result['rows']);
+      _total = _asInt(result['total']);
+    } catch (error) {
+      _error = error;
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _editBill(Map<String, dynamic> bill) async {
+    final amount = TextEditingController(text: '${bill['amount'] ?? ''}');
+    var status = bill['status'] as String? ?? 'pending';
+    final dueDate =
+        (bill['due_date'] as String?)?.substring(0, 10) ??
+        DateTime.now().toIso8601String().substring(0, 10);
+    final selectedDate = TextEditingController(text: dueDate);
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Editar factura'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Usuario: ${(bill['user'] as Map?)?['email'] ?? '—'}'),
+              TextField(
+                controller: amount,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(labelText: 'Monto'),
+              ),
+              TextField(
+                controller: selectedDate,
+                readOnly: true,
+                decoration: const InputDecoration(labelText: 'Vencimiento'),
+                onTap: () async {
+                  final current =
+                      DateTime.tryParse(selectedDate.text) ?? DateTime.now();
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: current,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) {
+                    selectedDate.text = picked.toIso8601String().substring(
+                      0,
+                      10,
+                    );
+                  }
+                },
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: status,
+                decoration: const InputDecoration(labelText: 'Estado'),
+                items: const [
+                  DropdownMenuItem(value: 'pending', child: Text('Pendiente')),
+                  DropdownMenuItem(value: 'paid', child: Text('Pagada')),
+                  DropdownMenuItem(value: 'overdue', child: Text('Vencida')),
+                ],
+                onChanged: (value) {
+                  if (value != null) setDialogState(() => status = value);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (save == true) {
+      try {
+        await _service.updateBill(
+          billId: bill['id'] as String,
+          amount: double.parse(amount.text),
+          dueDate: selectedDate.text,
+          status: status,
+        );
+        await _load();
+      } catch (error) {
+        _message('No se pudo actualizar la factura: $error');
+      }
+    }
+    amount.dispose();
+    selectedDate.dispose();
+  }
+
+  void _message(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error != null) return _AdminError(error: _error, onRetry: _load);
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _search,
+                  decoration: const InputDecoration(
+                    hintText: 'Buscar descripción o ID de usuario',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                  onSubmitted: (_) {
+                    _page = 0;
+                    _load();
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              DropdownButton<String>(
+                value: _status,
+                hint: const Text('Estado'),
+                items: const [
+                  DropdownMenuItem(value: '', child: Text('Todos')),
+                  DropdownMenuItem(value: 'pending', child: Text('Pendientes')),
+                  DropdownMenuItem(value: 'paid', child: Text('Pagadas')),
+                  DropdownMenuItem(value: 'overdue', child: Text('Vencidas')),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _status = value ?? '';
+                    _page = 0;
+                  });
+                  _load();
+                },
+              ),
+            ],
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Text('$_total facturas'),
+          ),
+        ),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _bills.isEmpty
+              ? const Center(child: Text('No se encontraron facturas.'))
+              : ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: _bills.length,
+                  itemBuilder: (context, index) {
+                    final bill = _bills[index];
+                    final owner = bill['user'] as Map?;
+                    return Card(
+                      child: ListTile(
+                        title: Text(
+                          (bill['description'] as String?)?.isNotEmpty == true
+                              ? bill['description'] as String
+                              : (bill['serviceName'] as String? ?? 'Factura'),
+                        ),
+                        subtitle: Text(
+                          '${owner?['name'] ?? 'Usuario'} · ${owner?['email'] ?? '—'}\n'
+                          '${bill['status']} · Vence ${_formatDate(bill['due_date'])} · ${bill['amount']} ${bill['currency'] ?? ''}',
+                        ),
+                        isThreeLine: true,
+                        trailing: IconButton(
+                          tooltip: 'Editar factura',
+                          onPressed: () => _editBill(bill),
+                          icon: const Icon(Icons.edit_outlined),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                onPressed: _page == 0 || _loading
+                    ? null
+                    : () {
+                        setState(() => _page--);
+                        _load();
+                      },
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Text('Página ${_page + 1}'),
+              IconButton(
+                onPressed: (_page + 1) * 25 >= _total || _loading
+                    ? null
+                    : () {
+                        setState(() => _page++);
+                        _load();
+                      },
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AdminAuditScreen extends StatefulWidget {
+  const _AdminAuditScreen();
+
+  @override
+  State<_AdminAuditScreen> createState() => _AdminAuditScreenState();
+}
+
+class _AdminAuditScreenState extends State<_AdminAuditScreen> {
+  late Future<Map<String, dynamic>> _data;
+  final _service = AdminService();
+
+  @override
+  void initState() {
+    super.initState();
+    _data = _service.getAuditLogs();
+  }
+
+  void _reload() => setState(() => _data = _service.getAuditLogs());
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _data,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _AdminError(error: snapshot.error, onRetry: _reload);
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final logs = _asMapList(snapshot.data!['rows']);
+        if (logs.isEmpty) {
+          return const Center(
+            child: Text('Todavía no hay acciones administrativas.'),
+          );
+        }
+        return RefreshIndicator(
+          onRefresh: () async => _reload(),
+          child: ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: logs.length,
+            itemBuilder: (context, index) {
+              final log = logs[index];
+              return Card(
+                child: ListTile(
+                  leading: const Icon(Icons.history),
+                  title: Text(_auditAction(log['action'] as String? ?? '')),
+                  subtitle: Text(
+                    'Objetivo: ${log['target_user_id'] ?? log['target_bill_id'] ?? '—'}\n'
+                    '${_formatDate(log['created_at'])}',
+                  ),
+                  isThreeLine: true,
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AdminSettingsScreen extends StatefulWidget {
+  const _AdminSettingsScreen();
+
+  @override
+  State<_AdminSettingsScreen> createState() => _AdminSettingsScreenState();
+}
+
+class _AdminSettingsScreenState extends State<_AdminSettingsScreen> {
+  final _service = AdminService();
+  final _announcement = TextEditingController();
+  bool _loading = true;
+  bool _saving = false;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _announcement.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final settings = await _service.getSettings();
+      _announcement.text = settings['announcement'] as String? ?? '';
+    } catch (error) {
+      _error = error;
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      await _service.updateAnnouncement(_announcement.text);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Aviso del sistema actualizado.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudo guardar la configuración: $error'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return _AdminError(error: _error, onRetry: _load);
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Text(
+          'Configuración del sistema',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Publica un aviso breve que se mostrará en el dashboard de los usuarios web y móviles. Déjalo vacío para ocultarlo.',
+        ),
+        const SizedBox(height: 20),
+        TextField(
+          controller: _announcement,
+          maxLength: 500,
+          maxLines: 5,
+          decoration: const InputDecoration(
+            labelText: 'Aviso para los usuarios',
+            hintText: 'Escribe un aviso del sistema…',
+            alignLabelWithHint: true,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton.icon(
+            onPressed: _saving ? null : _save,
+            icon: _saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save_outlined),
+            label: const Text('Guardar aviso'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: color.withValues(alpha: 0.12),
+              foregroundColor: color,
+              child: Icon(icon),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(value, style: Theme.of(context).textTheme.headlineSmall),
+                  Text(label, maxLines: 2, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Legend extends StatelessWidget {
+  const _Legend({required this.label, required this.color});
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      ),
+      const SizedBox(width: 6),
+      Text(label),
+    ],
+  );
+}
+
+class _AdminError extends StatelessWidget {
+  const _AdminError({required this.error, required this.onRetry});
+  final Object? error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, size: 42, color: Colors.red),
+          const SizedBox(height: 12),
+          Text(
+            'No se pudieron cargar los datos administrativos.\n$error',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Reintentar'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+int _asInt(Object? value) => value is num ? value.toInt() : 0;
+
+List<Map<String, dynamic>> _asMapList(Object? value) {
+  if (value is! List) return [];
+  return value.whereType<Map>().map(Map<String, dynamic>.from).toList();
+}
+
+String _formatDate(Object? value) {
+  if (value is! String || value.isEmpty) return '—';
+  final date = DateTime.tryParse(value);
+  if (date == null) return '—';
+  return DateFormat('dd/MM/yyyy HH:mm').format(date.toLocal());
+}
+
+String _auditAction(String action) => switch (action) {
+  'initial_password_changed' => 'Contraseña inicial cambiada',
+  'user_name_updated' => 'Nombre de usuario actualizado',
+  'user_enabled' => 'Cuenta de usuario activada',
+  'user_disabled' => 'Cuenta de usuario desactivada',
+  'user_deleted' => 'Cuenta y datos de usuario eliminados',
+  'bill_updated' => 'Factura modificada',
+  'system_announcement_updated' => 'Aviso del sistema actualizado',
+  _ => action,
+};

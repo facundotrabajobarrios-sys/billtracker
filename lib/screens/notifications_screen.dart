@@ -128,8 +128,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Notificaciones'),
-        backgroundColor: Colors.green[700],
-        foregroundColor: Colors.white,
         actions: [
           if (_notifications.isNotEmpty)
             IconButton(
@@ -148,7 +146,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         // ✅ PULL-TO-REFRESH
         onRefresh: _loadNotifications,
         color: Colors.green,
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _loadError != null
@@ -162,7 +160,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   final notification = _notifications[index];
                   return Card(
                     elevation: notification.isRead ? 0 : 2,
-                    color: notification.isRead ? Colors.grey[50] : Colors.white,
+                    color: notification.isRead
+                        ? Theme.of(context).colorScheme.surface
+                        : null,
                     margin: const EdgeInsets.symmetric(vertical: 4),
                     child: ListTile(
                       leading: CircleAvatar(

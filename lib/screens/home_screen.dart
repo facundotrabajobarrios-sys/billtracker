@@ -9,6 +9,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../providers/auth_provider.dart';
 import '../services/bill_service.dart';
@@ -20,6 +21,8 @@ import 'bills_screen.dart';
 import 'achievements_screen.dart';
 import 'profile_screen.dart';
 import 'notifications_screen.dart';
+import 'reports_screen.dart';
+import '../widgets/user_avatar.dart';
 
 // 🏠 Pantalla principal con navegación inferior
 class HomeScreen extends StatefulWidget {
@@ -39,8 +42,10 @@ class _HomeScreenState extends State<HomeScreen> {
       case 1:
         return const BillsScreen();
       case 2:
-        return const AchievementsScreen();
+        return const ReportsScreen();
       case 3:
+        return const AchievementsScreen();
+      case 4:
         return const ProfileScreen();
       default:
         return const _HomeContent();
@@ -49,22 +54,179 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isWide = MediaQuery.sizeOf(context).width >= 900;
     return Scaffold(
-      body: _screenForIndex(_selectedIndex),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
-        selectedItemColor: Colors.green[700],
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Inicio'),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'Facturas'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.emoji_events),
-            label: 'Logros',
+      body: isWide
+          ? Row(
+              children: [
+                _buildSidebar(context),
+                Expanded(child: _screenForIndex(_selectedIndex)),
+              ],
+            )
+          : _screenForIndex(_selectedIndex),
+      bottomNavigationBar: isWide
+          ? null
+          : NavigationBar(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (index) =>
+                  setState(() => _selectedIndex = index),
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.space_dashboard_outlined),
+                  selectedIcon: Icon(Icons.space_dashboard),
+                  label: 'Inicio',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.receipt_long_outlined),
+                  selectedIcon: Icon(Icons.receipt_long),
+                  label: 'Facturas',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.bar_chart_outlined),
+                  selectedIcon: Icon(Icons.bar_chart),
+                  label: 'Reportes',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.emoji_events_outlined),
+                  selectedIcon: Icon(Icons.emoji_events),
+                  label: 'Logros',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.person_outline),
+                  selectedIcon: Icon(Icons.person),
+                  label: 'Perfil',
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildSidebar(BuildContext context) {
+    final user = context.watch<AuthProvider>().user;
+    const destinations = [
+      (Icons.space_dashboard_outlined, 'Panel'),
+      (Icons.receipt_long_outlined, 'Facturas'),
+      (Icons.bar_chart_outlined, 'Reportes'),
+      (Icons.emoji_events_outlined, 'Logros'),
+      (Icons.person_outline, 'Perfil'),
+    ];
+
+    return Container(
+      width: 244,
+      color: const Color(0xFF0B3028),
+      padding: const EdgeInsets.fromLTRB(14, 20, 14, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(9),
+                child: Image.asset(
+                  'assets/icons/billtracker.png',
+                  width: 36,
+                  height: 36,
+                  semanticLabel: 'BillTracker',
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                'BillTracker',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 17,
+                ),
+              ),
+            ],
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Perfil'),
+          const SizedBox(height: 34),
+          const Padding(
+            padding: EdgeInsets.only(left: 12, bottom: 10),
+            child: Text(
+              'MENÚ',
+              style: TextStyle(
+                color: Color(0xFF9AB7AE),
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ),
+          for (var index = 0; index < destinations.length; index++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 5),
+              child: InkWell(
+                onTap: () => setState(() => _selectedIndex = index),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  height: 44,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: _selectedIndex == index
+                        ? const Color(0xFF174B40)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        destinations[index].$1,
+                        size: 19,
+                        color: _selectedIndex == index
+                            ? const Color(0xFF68D4B5)
+                            : const Color(0xFFD4E4DF),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        destinations[index].$2,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: _selectedIndex == index
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          const Spacer(),
+          const Divider(color: Color(0xFF254A40), height: 1),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              UserAvatar(
+                name: user?.name,
+                imageUrl: user?.avatarUrl,
+                radius: 19,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      user?.name ?? 'Usuario',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Text(
+                      'Cuenta personal',
+                      style: TextStyle(color: Color(0xFF9AB7AE), fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -90,6 +252,8 @@ class _HomeContentState extends State<_HomeContent> {
   List<Bill> _allBills = [];
   bool _isLoading = true;
   int _unreadCount = 0;
+  String? _loadError;
+  String? _systemAnnouncement;
 
   // Filtros: por defecto últimos 30 días
   late DateTime _startDate;
@@ -103,10 +267,31 @@ class _HomeContentState extends State<_HomeContent> {
     _startDate = _endDate.subtract(const Duration(days: 30));
     _loadData();
     _loadUnreadCount();
+    _loadSystemAnnouncement();
+  }
+
+  Future<void> _loadSystemAnnouncement() async {
+    try {
+      final notice = await Supabase.instance.client.rpc(
+        'get_public_app_notice',
+      );
+      if (!mounted) return;
+      setState(() {
+        _systemAnnouncement = notice is String && notice.trim().isNotEmpty
+            ? notice.trim()
+            : null;
+      });
+    } catch (error) {
+      debugPrint('No se pudo cargar el aviso del sistema: $error');
+    }
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
 
     final userId = context.read<AuthProvider>().user?.id;
     if (userId != null) {
@@ -137,10 +322,12 @@ class _HomeContentState extends State<_HomeContent> {
           }
         }
       } catch (e) {
-        print('❌ Error cargando datos: $e');
+        debugPrint('Error cargando el resumen financiero: $e');
+        _loadError = 'No se pudieron cargar tus facturas: $e';
       }
     }
 
+    if (!mounted) return;
     setState(() => _isLoading = false);
   }
 
@@ -148,6 +335,7 @@ class _HomeContentState extends State<_HomeContent> {
     final userId = context.read<AuthProvider>().user?.id;
     if (userId != null) {
       _unreadCount = await _notiService.countUnread(userId);
+      if (!mounted) return;
       setState(() {});
     }
   }
@@ -182,7 +370,7 @@ class _HomeContentState extends State<_HomeContent> {
                 ) &&
                 b.dueDate.isBefore(monthEnd.add(const Duration(seconds: 1)));
           })
-          .fold<double>(0.0, (prev, b) => prev + (b.amount ?? 0.0));
+          .fold<double>(0.0, (prev, b) => prev + b.amount);
       sums[i] = total;
     }
 
@@ -194,7 +382,20 @@ class _HomeContentState extends State<_HomeContent> {
     const months = 6;
     return List.generate(months, (i) {
       final m = DateTime(now.year, now.month - (months - 1 - i), 1);
-      return DateFormat('MMM').format(m);
+      return const [
+        'ene',
+        'feb',
+        'mar',
+        'abr',
+        'may',
+        'jun',
+        'jul',
+        'ago',
+        'sep',
+        'oct',
+        'nov',
+        'dic',
+      ][m.month - 1];
     });
   }
 
@@ -208,9 +409,7 @@ class _HomeContentState extends State<_HomeContent> {
         child: BarChart(
           BarChartData(
             alignment: BarChartAlignment.spaceAround,
-            maxY: (data.isNotEmpty
-                ? (data.reduce((a, b) => a > b ? a : b) * 1.2)
-                : 100.0),
+            maxY: _chartMaxY(data),
             titlesData: FlTitlesData(
               show: true,
               bottomTitles: AxisTitles(
@@ -229,18 +428,40 @@ class _HomeContentState extends State<_HomeContent> {
                 ),
               ),
               leftTitles: AxisTitles(
-                sideTitles: SideTitles(showTitles: true, reservedSize: 40),
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 56,
+                  getTitlesWidget: (value, _) => Text(
+                    _compactAmount(value),
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                ),
               ),
             ),
             barGroups: List.generate(data.length, (i) {
               return BarChartGroupData(
                 x: i,
                 barRods: [
-                  BarChartRodData(toY: data[i], color: Colors.green, width: 14),
+                  BarChartRodData(
+                    toY: data[i],
+                    color: const Color(0xFF087F63),
+                    width: 16,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(5),
+                    ),
+                  ),
                 ],
               );
             }),
-            gridData: FlGridData(show: false),
+            gridData: FlGridData(
+              drawVerticalLine: false,
+              getDrawingHorizontalLine: (_) => FlLine(
+                color: Theme.of(context).dividerColor.withValues(alpha: 0.4),
+                strokeWidth: 1,
+                dashArray: [4, 4],
+              ),
+            ),
+            borderData: FlBorderData(show: false),
           ),
         ),
       ),
@@ -262,9 +483,7 @@ class _HomeContentState extends State<_HomeContent> {
         child: LineChart(
           LineChartData(
             minY: 0,
-            maxY: (data.isNotEmpty
-                ? (data.reduce((a, b) => a > b ? a : b) * 1.2)
-                : 100.0),
+            maxY: _chartMaxY(data),
             titlesData: FlTitlesData(
               bottomTitles: AxisTitles(
                 sideTitles: SideTitles(
@@ -282,19 +501,38 @@ class _HomeContentState extends State<_HomeContent> {
                 ),
               ),
               leftTitles: AxisTitles(
-                sideTitles: SideTitles(showTitles: true, reservedSize: 40),
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 56,
+                  getTitlesWidget: (value, _) => Text(
+                    _compactAmount(value),
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                ),
               ),
             ),
             lineBarsData: [
               LineChartBarData(
                 spots: spots,
                 isCurved: true,
-                color: Colors.blue,
+                color: const Color(0xFF4386D8),
                 barWidth: 3,
                 dotData: FlDotData(show: true),
+                belowBarData: BarAreaData(
+                  show: true,
+                  color: const Color(0xFF4386D8).withValues(alpha: 0.1),
+                ),
               ),
             ],
-            gridData: FlGridData(show: false),
+            gridData: FlGridData(
+              drawVerticalLine: false,
+              getDrawingHorizontalLine: (_) => FlLine(
+                color: Theme.of(context).dividerColor.withValues(alpha: 0.4),
+                strokeWidth: 1,
+                dashArray: [4, 4],
+              ),
+            ),
+            borderData: FlBorderData(show: false),
           ),
         ),
       ),
@@ -324,6 +562,7 @@ class _HomeContentState extends State<_HomeContent> {
     }
 
     await Clipboard.setData(ClipboardData(text: buffer.toString()));
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('CSV copiado al portapapeles')),
     );
@@ -401,7 +640,7 @@ class _HomeContentState extends State<_HomeContent> {
             'billtracker_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.pdf',
       );
     } catch (e) {
-      // Fallback: guardar en portapapeles como base64 (no ideal) o mostrar error
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error compartiendo PDF: $e')));
@@ -457,8 +696,6 @@ class _HomeContentState extends State<_HomeContent> {
             const Text('BillTracker'),
           ],
         ),
-        backgroundColor: Colors.green[700],
-        foregroundColor: Colors.white,
         actions: [
           Stack(
             children: [
@@ -510,249 +747,284 @@ class _HomeContentState extends State<_HomeContent> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
+          : _loadError != null
+          ? _buildLoadError()
           : RefreshIndicator(
               onRefresh: () async {
                 await _loadData();
                 await _loadUnreadCount();
               },
               // Usar ListView para evitar BottomOverflow y permitir desplazamiento
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  Text(
-                    '¡Hola ${user?.name ?? 'Usuario'}! 👋',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Nivel: ${user?.level ?? 0} | Puntos: ${user?.points ?? 0}',
-                    style: const TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Filtros y Export
-                  Row(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1320),
+                  child: ListView(
+                    padding: const EdgeInsets.all(24),
                     children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: _pickStartDate,
-                          child: Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.date_range, size: 18),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Desde: ${DateFormat('yyyy-MM-dd').format(_startDate)}',
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: _pickEndDate,
-                          child: Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.date_range, size: 18),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Hasta: ${DateFormat('yyyy-MM-dd').format(_endDate)}',
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
                       Row(
-                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          ElevatedButton.icon(
-                            onPressed: _exportCsvToClipboard,
-                            icon: const Icon(Icons.download),
-                            label: const Text('Export CSV'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green[700],
-                            ),
+                          UserAvatar(
+                            name: user?.name,
+                            imageUrl: user?.avatarUrl,
+                            radius: 25,
                           ),
-                          const SizedBox(width: 8),
-                          ElevatedButton.icon(
-                            onPressed: _exportPdfAndShare,
-                            icon: const Icon(Icons.picture_as_pdf),
-                            label: const Text('Export PDF'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green[700],
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Hola, ${user?.name ?? 'Usuario'}',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineSmall
+                                      ?.copyWith(fontWeight: FontWeight.w700),
+                                ),
+                                Text(
+                                  'Aquí tienes el resumen de tus facturas y pagos.',
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
+                                      ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Cards
-                  Row(
-                    children: [
-                      _buildCard(
-                        'Pendientes',
-                        _pending,
-                        Colors.orange,
-                        Icons.pending_actions,
-                      ),
-                      const SizedBox(width: 12),
-                      _buildCard(
-                        'Pagadas',
-                        _paid,
-                        Colors.green,
-                        Icons.check_circle,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      _buildCard(
-                        'Vencidas',
-                        _overdue,
-                        Colors.red,
-                        Icons.warning,
-                      ),
-                      const SizedBox(width: 12),
-                      _buildCard(
-                        'Total',
-                        _total,
-                        Colors.blue,
-                        Icons.receipt_long,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  const Text(
-                    'Facturas pendientes vs pagadas',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: SizedBox(
-                      width: 220,
-                      height: 220,
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: PieChart(
-                            PieChartData(
-                              sections: [
-                                PieChartSectionData(
-                                  value: pendingCount.toDouble(),
-                                  color: Colors.orange,
-                                  title: pendingCount.toString(),
-                                  radius: 50,
+                      if (_systemAnnouncement != null) ...[
+                        const SizedBox(height: 18),
+                        Card(
+                          color: Theme.of(context).colorScheme.primaryContainer,
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.campaign_outlined,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimaryContainer,
                                 ),
-                                PieChartSectionData(
-                                  value: paidCount.toDouble(),
-                                  color: Colors.green,
-                                  title: paidCount.toString(),
-                                  radius: 50,
-                                ),
-                                PieChartSectionData(
-                                  value: overdueCount.toDouble(),
-                                  color: Colors.red,
-                                  title: overdueCount.toString(),
-                                  radius: 50,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _systemAnnouncement!,
+                                    style: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onPrimaryContainer,
+                                    ),
+                                  ),
                                 ),
                               ],
-                              sectionsSpace: 2,
-                              centerSpaceRadius: 24,
                             ),
                           ),
                         ),
+                      ],
+                      const SizedBox(height: 20),
+
+                      // Filtros y Export
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: _pickStartDate,
+                            icon: const Icon(Icons.calendar_today_outlined),
+                            label: Text(
+                              'Desde ${DateFormat('dd/MM/yyyy').format(_startDate)}',
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: _pickEndDate,
+                            icon: const Icon(Icons.event_outlined),
+                            label: Text(
+                              'Hasta ${DateFormat('dd/MM/yyyy').format(_endDate)}',
+                            ),
+                          ),
+                          FilledButton.tonalIcon(
+                            onPressed: _exportCsvToClipboard,
+                            icon: const Icon(Icons.file_download_outlined),
+                            label: const Text('Exportar CSV'),
+                          ),
+                          FilledButton.icon(
+                            onPressed: _exportPdfAndShare,
+                            icon: const Icon(Icons.picture_as_pdf_outlined),
+                            label: const Text('Exportar PDF'),
+                          ),
+                        ],
                       ),
-                    ),
-                  ),
 
-                  const SizedBox(height: 12),
+                      const SizedBox(height: 20),
 
-                  const Text(
-                    'Evolución de pagos mensuales',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(height: 200, child: _buildMonthlyBarChart()),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Tendencia del gasto mensual',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(height: 180, child: _buildMonthlyLineChart()),
-
-                  const SizedBox(height: 20),
-
-                  // Próximos vencimientos
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        '📋 Próximos vencimientos',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          final homeState = context
-                              .findAncestorStateOfType<_HomeScreenState>();
-                          homeState?.setState(() {
-                            homeState._selectedIndex = 1;
-                          });
+                      // Cards
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final columns = constraints.maxWidth >= 1000
+                              ? 4
+                              : constraints.maxWidth >= 540
+                              ? 2
+                              : 1;
+                          final width =
+                              (constraints.maxWidth - (columns - 1) * 12) /
+                              columns;
+                          return Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: [
+                              _buildCard(
+                                'Pendientes',
+                                _pending,
+                                const Color(0xFFF0AD3D),
+                                Icons.pending_actions_outlined,
+                                width,
+                              ),
+                              _buildCard(
+                                'Pagadas',
+                                _paid,
+                                const Color(0xFF188B6D),
+                                Icons.check_circle_outline,
+                                width,
+                              ),
+                              _buildCard(
+                                'Vencidas',
+                                _overdue,
+                                const Color(0xFFE46E66),
+                                Icons.warning_amber_outlined,
+                                width,
+                              ),
+                              _buildCard(
+                                'Total',
+                                _total,
+                                const Color(0xFF4386D8),
+                                Icons.receipt_long_outlined,
+                                width,
+                              ),
+                            ],
+                          );
                         },
-                        child: const Text(
-                          'Ver todas',
-                          style: TextStyle(color: Colors.green),
-                        ),
                       ),
+                      const SizedBox(height: 20),
+
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final columns = constraints.maxWidth >= 850 ? 2 : 1;
+                          final width =
+                              (constraints.maxWidth - (columns - 1) * 16) /
+                              columns;
+                          final charts = [
+                            _buildStatusChart(
+                              pendingCount,
+                              paidCount,
+                              overdueCount,
+                            ),
+                            _buildMonthlyChartPanel(
+                              'Evolución mensual',
+                              'Importe de facturas por mes',
+                              _buildMonthlyBarChart(),
+                            ),
+                            _buildMonthlyChartPanel(
+                              'Tendencia del gasto',
+                              'Comparación de los últimos seis meses',
+                              _buildMonthlyLineChart(),
+                            ),
+                          ];
+                          return Wrap(
+                            spacing: 16,
+                            runSpacing: 16,
+                            children: [
+                              for (final chart in charts)
+                                SizedBox(
+                                  width: width,
+                                  height: 286,
+                                  child: chart,
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Próximos vencimientos
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Próximos vencimientos',
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              final homeState = context
+                                  .findAncestorStateOfType<_HomeScreenState>();
+                              homeState?.setState(() {
+                                homeState._selectedIndex = 1;
+                              });
+                            },
+                            child: const Text('Ver todas'),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      _filteredBills.isEmpty
+                          ? const Text(
+                              '🎉 No hay facturas en el periodo seleccionado',
+                              style: TextStyle(color: Colors.grey),
+                            )
+                          : Column(
+                              children: _filteredBills
+                                  .take(5)
+                                  .map((b) => _buildBillItem(b))
+                                  .toList(),
+                            ),
                     ],
                   ),
-
-                  const SizedBox(height: 8),
-
-                  _filteredBills.isEmpty
-                      ? const Text(
-                          '🎉 No hay facturas en el periodo seleccionado',
-                          style: TextStyle(color: Colors.grey),
-                        )
-                      : Column(
-                          children: _filteredBills
-                              .map((b) => _buildBillItem(b))
-                              .toList(),
-                        ),
-                ],
+                ),
               ),
             ),
     );
   }
 
-  Widget _buildCard(String title, int count, Color color, IconData icon) {
-    return Expanded(
+  Widget _buildLoadError() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.cloud_off_outlined, size: 48),
+          const SizedBox(height: 12),
+          Text(_loadError!, textAlign: TextAlign.center),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: _loadData,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Reintentar'),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _buildCard(
+    String title,
+    int count,
+    Color color,
+    IconData icon,
+    double width,
+  ) {
+    return SizedBox(
+      width: width,
       child: Card(
-        elevation: 2,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -766,19 +1038,167 @@ class _HomeContentState extends State<_HomeContent> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                '$count',
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '$count',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Text(
+                      'facturas',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildStatusChart(int pending, int paid, int overdue) {
+    final values = [
+      ('Pendientes', pending, const Color(0xFFF0AD3D)),
+      ('Pagadas', paid, const Color(0xFF188B6D)),
+      ('Vencidas', overdue, const Color(0xFFE46E66)),
+    ];
+    final total = pending + paid + overdue;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Estado de facturas',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              '$total en total',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: PieChart(
+                      PieChartData(
+                        sections: [
+                          for (final entry in values)
+                            if (entry.$2 > 0)
+                              PieChartSectionData(
+                                value: entry.$2.toDouble(),
+                                color: entry.$3,
+                                title: '${entry.$2}',
+                                radius: 24,
+                                titleStyle: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                        ],
+                        sectionsSpace: 3,
+                        centerSpaceRadius: 32,
+                      ),
+                      duration: const Duration(milliseconds: 350),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        for (final entry in values)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 7),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 9,
+                                  height: 9,
+                                  decoration: BoxDecoration(
+                                    color: entry.$3,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 7),
+                                Expanded(
+                                  child: Text(
+                                    entry.$1,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ),
+                                Text(
+                                  '${entry.$2}',
+                                  style: Theme.of(context).textTheme.labelLarge,
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMonthlyChartPanel(String title, String subtitle, Widget chart) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          subtitle,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(child: chart),
+      ],
+    );
+  }
+
+  double _chartMaxY(List<double> data) {
+    final maximum = data.reduce((a, b) => a > b ? a : b);
+    return maximum == 0 ? 1 : maximum * 1.2;
+  }
+
+  String _compactAmount(double amount) {
+    if (amount >= 1000000) return '${(amount / 1000000).toStringAsFixed(1)} M';
+    if (amount >= 1000) return '${(amount / 1000).toStringAsFixed(0)} mil';
+    return amount.toStringAsFixed(0);
   }
 
   Widget _buildBillItem(Bill bill) {
@@ -789,7 +1209,7 @@ class _HomeContentState extends State<_HomeContent> {
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: bill.statusColor.withOpacity(0.2),
+          backgroundColor: bill.statusColor.withValues(alpha: 0.16),
           child: Text(categoryIcon, style: const TextStyle(fontSize: 16)),
         ),
         title: Text(

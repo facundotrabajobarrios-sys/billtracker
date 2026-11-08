@@ -10,31 +10,55 @@ import 'providers/auth_provider.dart';
 import 'providers/gamification_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/login_screen.dart';
-import 'screens/home_screen.dart';
 import 'screens/reset_password_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/add_bill_screen.dart';
 import 'screens/update_password_screen.dart';
 import 'screens/auth_callback_screen.dart';
+import 'screens/admin_screen.dart';
 import 'config/supabase_config.dart';
 import 'services/push_notification_service.dart';
+import 'utils/app_theme.dart';
+import 'utils/app_navigator.dart';
 
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool _initialPasswordRecoveryLink = false;
 
 Future<void> _exchangeWebAuthCode() async {
   if (!kIsWeb ||
       (!Uri.base.path.endsWith('/auth/callback') &&
-          !Uri.base.path.endsWith('/auth/reset-password')) ||
-      Uri.base.queryParameters['code'] == null) {
+          !Uri.base.path.endsWith('/auth/reset-password'))) {
     return;
   }
 
   try {
-    final response = await Supabase.instance.client.auth.exchangeCodeForSession(
-      Uri.base.queryParameters['code']!,
-    );
-    if (response.redirectType == AuthChangeEvent.passwordRecovery.name) {
+    final fragment = Uri.base.fragment.isEmpty
+        ? <String, String>{}
+        : Uri.splitQueryString(Uri.base.fragment);
+    final parameters = {...Uri.base.queryParameters, ...fragment};
+    final auth = Supabase.instance.client.auth;
+    final code = parameters['code'];
+    if (code != null) {
+      final response = await auth.exchangeCodeForSession(code);
+      if (response.redirectType == AuthChangeEvent.passwordRecovery.name ||
+          parameters['type'] == 'recovery') {
+        _initialPasswordRecoveryLink = true;
+      }
+      return;
+    }
+
+    final tokenHash = parameters['token_hash'];
+    if (parameters['type'] == 'recovery' && tokenHash != null) {
+      await auth.verifyOTP(tokenHash: tokenHash, type: OtpType.recovery);
+      _initialPasswordRecoveryLink = true;
+      return;
+    }
+
+    final accessToken = parameters['access_token'];
+    final refreshToken = parameters['refresh_token'];
+    if (parameters['type'] == 'recovery' &&
+        accessToken != null &&
+        refreshToken != null) {
+      await auth.setSession(refreshToken, accessToken: accessToken);
       _initialPasswordRecoveryLink = true;
     }
   } catch (error) {
@@ -178,19 +202,8 @@ class MyApp extends StatelessWidget {
           return MaterialApp(
             navigatorKey: navigatorKey,
             title: 'BillTracker',
-            theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: const Color(0xFF2E7D32),
-              ),
-              useMaterial3: true,
-            ),
-            darkTheme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: const Color(0xFF66BB6A),
-                brightness: Brightness.dark,
-              ),
-              useMaterial3: true,
-            ),
+            theme: AppTheme.light,
+            darkTheme: AppTheme.dark,
             themeMode: themeProvider.isDarkMode
                 ? ThemeMode.dark
                 : ThemeMode.light,
@@ -201,11 +214,11 @@ class MyApp extends StatelessWidget {
                 : isWebCallback
                 ? const AuthCallbackScreen()
                 : isAuth
-                ? const HomeScreen()
+                ? const AuthenticatedHomeScreen()
                 : const LoginScreen(),
             routes: {
               '/login': (context) => const LoginScreen(),
-              '/home': (context) => const HomeScreen(),
+              '/home': (context) => const AuthenticatedHomeScreen(),
               '/reset-password': (context) => const ResetPasswordScreen(),
               '/update-password': (context) => const UpdatePasswordScreen(),
               '/notifications': (context) => const NotificationsScreen(),

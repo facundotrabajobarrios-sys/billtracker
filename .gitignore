@@ -44,3 +44,14 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 /supabase/.temp/
+
+# Local environment variables and credentials
+.env
+.env.*
+!.env.example
+
+# Local backups may contain private user or database data
+/backups/*
+!/backups/.gitkeep
+/node_modules/
+/android/.settings/

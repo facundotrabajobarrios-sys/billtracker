@@ -15,11 +15,9 @@ class BillService {
 
   // 📥 Obtener todas las facturas del usuario
   Future<List<Bill>> getBills(String userId) async {
-    try {
-      // ✅ CAMBIAR `!inner` por `()`
-      final response = await client
-          .from('bills')
-          .select('''
+    final response = await client
+        .from('bills')
+        .select('''
             *,
             services (
               id,
@@ -33,22 +31,10 @@ class BillService {
               color
             )
           ''')
-          .eq('user_id', userId)
-          .order('due_date', ascending: true);
+        .eq('user_id', userId)
+        .order('due_date', ascending: true);
 
-      print('📊 Facturas obtenidas: ${response.length}');
-
-      if (response is List) {
-        return response.map((json) {
-          print('📄 Factura: ${json['id']} - Servicio: ${json['services']}');
-          return Bill.fromJson(json);
-        }).toList();
-      }
-      return [];
-    } catch (e) {
-      print('❌ Error al obtener facturas: $e');
-      return [];
-    }
+    return response.map((json) => Bill.fromJson(json)).toList();
   }
 
   // 📥 Obtener una factura por ID
@@ -259,26 +245,20 @@ class BillService {
 
   // 📊 Obtener resumen de facturas
   Future<Map<String, int>> getSummary(String userId) async {
-    try {
-      final allBills = await getBills(userId);
+    final allBills = await getBills(userId);
 
-      int pending = allBills.where((b) => b.status == 'pending').length;
-      int paid = allBills.where((b) => b.status == 'paid').length;
-      int overdue = allBills
-          .where((b) => b.status == 'overdue' || b.isOverdue)
-          .length;
-      int total = allBills.length;
+    final pending = allBills.where((b) => b.status == 'pending').length;
+    final paid = allBills.where((b) => b.status == 'paid').length;
+    final overdue = allBills
+        .where((b) => b.status == 'overdue' || b.isOverdue)
+        .length;
 
-      return {
-        'pending': pending,
-        'paid': paid,
-        'overdue': overdue,
-        'total': total,
-      };
-    } catch (e) {
-      print('❌ Error al obtener resumen: $e');
-      return {'pending': 0, 'paid': 0, 'overdue': 0, 'total': 0};
-    }
+    return {
+      'pending': pending,
+      'paid': paid,
+      'overdue': overdue,
+      'total': allBills.length,
+    };
   }
 
   // 📥 Obtener servicios (para el selector)

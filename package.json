@@ -1,5 +1,11 @@
 {
+  "scripts": {
+    "backup:db": "node scripts/backup-db.js"
+  },
   "devDependencies": {
     "supabase": "^2.117.0"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.9"
   }
 }

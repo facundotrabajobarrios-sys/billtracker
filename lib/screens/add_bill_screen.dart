@@ -313,8 +313,6 @@ class _AddBillScreenState extends State<AddBillScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? 'Editar Factura' : 'Agregar Factura'),
-        backgroundColor: Colors.green[700],
-        foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -330,384 +328,399 @@ class _AddBillScreenState extends State<AddBillScreen> {
       ),
       body: _isLoadingData
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.stretch, // ✅ Alineación de los campos
-                  children: [
-                    // 🏢 Servicio
-                    Row(
+          : Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 840),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment
-                          .start, // ✅ Alineación superior para el botón
+                          .stretch, // ✅ Alineación de los campos
                       children: [
-                        Expanded(
-                          flex: 3,
-                          child: DropdownButtonFormField<String>(
-                            decoration: const InputDecoration(
-                              labelText: 'Servicio *',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.business),
+                        // 🏢 Servicio
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment
+                              .start, // ✅ Alineación superior para el botón
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: DropdownButtonFormField<String>(
+                                decoration: const InputDecoration(
+                                  labelText: 'Servicio *',
+                                  border: OutlineInputBorder(),
+                                  prefixIcon: Icon(Icons.business),
+                                ),
+                                initialValue: _selectedServiceId,
+                                items: _services
+                                    .map(
+                                      (s) => DropdownMenuItem<String>(
+                                        // ✅ Especificar tipo
+                                        value: s['id'],
+                                        child: Text(s['name']),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (v) =>
+                                    setState(() => _selectedServiceId = v),
+                                validator: (v) =>
+                                    v == null ? 'Selecciona un servicio' : null,
+                              ),
                             ),
-                            initialValue: _selectedServiceId,
-                            items: _services
-                                .map(
-                                  (s) => DropdownMenuItem<String>(
-                                    // ✅ Especificar tipo
-                                    value: s['id'],
-                                    child: Text(s['name']),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) =>
-                                setState(() => _selectedServiceId = v),
-                            validator: (v) =>
-                                v == null ? 'Selecciona un servicio' : null,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 1,
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.add_circle,
-                              color: Colors.green,
-                              size: 40,
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 1,
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.add_circle,
+                                  color: Colors.green,
+                                  size: 40,
+                                ),
+                                onPressed: _isAddingService
+                                    ? null
+                                    : _showAddServiceDialog,
+                              ),
                             ),
-                            onPressed: _isAddingService
-                                ? null
-                                : _showAddServiceDialog,
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
+                        const SizedBox(height: 16),
 
-                    // 📂 Categoría
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(
-                        labelText: 'Categoría *',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.category),
-                      ),
-                      initialValue: _selectedCategoryId,
-                      items: _categories
-                          .map(
-                            (c) => DropdownMenuItem<String>(
+                        // 📂 Categoría
+                        DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(
+                            labelText: 'Categoría *',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.category),
+                          ),
+                          initialValue: _selectedCategoryId,
+                          items: _categories
+                              .map(
+                                (c) => DropdownMenuItem<String>(
+                                  // ✅ Especificar tipo
+                                  value: c['id'],
+                                  child: Row(
+                                    children: [
+                                      Text(c['icon'] ?? '📌'),
+                                      const SizedBox(width: 8),
+                                      Text(c['name']),
+                                    ],
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (v) =>
+                              setState(() => _selectedCategoryId = v),
+                          validator: (v) =>
+                              v == null ? 'Selecciona una categoría' : null,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // 💰 Monto
+                        TextFormField(
+                          controller: _amountController,
+                          decoration: const InputDecoration(
+                            labelText: 'Monto *',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.attach_money),
+                            suffixText: '₲',
+                          ),
+                          keyboardType: TextInputType.number,
+                          validator: (v) {
+                            if (v == null || v.isEmpty) {
+                              return 'Ingresa el monto';
+                            }
+                            final n = double.tryParse(v);
+                            if (n == null) return 'Número inválido';
+                            if (n <= 0) return 'Monto mayor a 0';
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+
+                        // 📅 Fecha
+                        InkWell(
+                          onTap: _selectDate,
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'Fecha de vencimiento *',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.calendar_today),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+                                ),
+                                const Icon(Icons.arrow_drop_down),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // 📝 Descripción
+                        TextFormField(
+                          controller: _descriptionController,
+                          decoration: const InputDecoration(
+                            labelText: 'Descripción (opcional)',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.description),
+                          ),
+                          maxLines: 2,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // 🔄 Recurrente
+                        SwitchListTile(
+                          title: const Text('Factura recurrente'),
+                          subtitle: const Text('Se repite cada mes'),
+                          value: _isRecurring,
+                          onChanged: (v) => setState(() => _isRecurring = v),
+                          activeThumbColor: Colors.green,
+                        ),
+
+                        // 🔔 Configuración de recordatorios
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Canales de recordatorio',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        if (_supportsPushNotifications)
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Notificación push'),
+                            subtitle: const Text(
+                              'Alerta local en este dispositivo móvil',
+                            ),
+                            value: _reminderPushEnabled,
+                            onChanged: (value) =>
+                                setState(() => _reminderPushEnabled = value),
+                          ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Correo electrónico'),
+                          subtitle: const Text(
+                            'Se enviará al correo asociado a tu cuenta',
+                          ),
+                          value: _reminderEmailEnabled,
+                          onChanged: (value) =>
+                              setState(() => _reminderEmailEnabled = value),
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Bandeja de BillTracker'),
+                          subtitle: const Text(
+                            'Guardar la alerta en tus notificaciones',
+                          ),
+                          value: _reminderInAppEnabled,
+                          onChanged: (value) =>
+                              setState(() => _reminderInAppEnabled = value),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Text('Anticipación: '),
+                            Expanded(
+                              child: Slider(
+                                value: _reminderDays.toDouble(),
+                                min: 1,
+                                max: 10,
+                                divisions: 9,
+                                label: '$_reminderDays días',
+                                activeColor: Colors.green,
+                                onChanged: (v) =>
+                                    setState(() => _reminderDays = v.round()),
+                              ),
+                            ),
+                            Text(
+                              '$_reminderDays días',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.schedule),
+                            const SizedBox(width: 12),
+                            SizedBox(
+                              width: 56,
+                              child: TextFormField(
+                                controller: _reminderHourController,
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                maxLength: 2,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                decoration: const InputDecoration(
+                                  hintText: 'HH',
+                                  counterText: '',
+                                  border: OutlineInputBorder(),
+                                ),
+                                validator: (value) {
+                                  final hour = int.tryParse(value ?? '');
+                                  return hour == null || hour > 23
+                                      ? '00-23'
+                                      : null;
+                                },
+                                onChanged: (_) => _updateReminderTime(),
+                              ),
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 6),
+                              child: Text(':'),
+                            ),
+                            SizedBox(
+                              width: 56,
+                              child: TextFormField(
+                                controller: _reminderMinuteController,
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                maxLength: 2,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                decoration: const InputDecoration(
+                                  hintText: 'MM',
+                                  counterText: '',
+                                  border: OutlineInputBorder(),
+                                ),
+                                validator: (value) {
+                                  final minute = int.tryParse(value ?? '');
+                                  return minute == null || minute > 59
+                                      ? '00-59'
+                                      : null;
+                                },
+                                onChanged: (_) => _updateReminderTime(),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Canales de recordatorio',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        if (_supportsPushNotifications)
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            secondary: const Icon(Icons.notifications_active),
+                            title: const Text(
+                              'Notificación en este dispositivo',
+                            ),
+                            subtitle: const Text(
+                              'Alerta local en Android/iOS, aunque la app esté cerrada',
+                            ),
+                            value: _reminderPushEnabled,
+                            onChanged: (value) =>
+                                setState(() => _reminderPushEnabled = value),
+                          ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.email_outlined),
+                          title: const Text('Correo electrónico'),
+                          subtitle: const Text(
+                            'Enviar el recordatorio al correo de tu cuenta',
+                          ),
+                          value: _reminderEmailEnabled,
+                          onChanged: (value) =>
+                              setState(() => _reminderEmailEnabled = value),
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.inbox_outlined),
+                          title: const Text('Bandeja de la aplicación'),
+                          subtitle: const Text(
+                            'Mostrar el recordatorio en Notificaciones',
+                          ),
+                          value: _reminderInAppEnabled,
+                          onChanged: (value) =>
+                              setState(() => _reminderInAppEnabled = value),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // 📊 Estado
+                        DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(
+                            labelText: 'Estado',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.info),
+                          ),
+                          initialValue: _selectedStatus,
+                          items: const [
+                            DropdownMenuItem<String>(
                               // ✅ Especificar tipo
-                              value: c['id'],
+                              value: 'pending',
                               child: Row(
                                 children: [
-                                  Text(c['icon'] ?? '📌'),
-                                  const SizedBox(width: 8),
-                                  Text(c['name']),
+                                  Icon(Icons.pending, color: Colors.orange),
+                                  SizedBox(width: 8),
+                                  Text('Pendiente'),
                                 ],
                               ),
                             ),
-                          )
-                          .toList(),
-                      onChanged: (v) => setState(() => _selectedCategoryId = v),
-                      validator: (v) =>
-                          v == null ? 'Selecciona una categoría' : null,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // 💰 Monto
-                    TextFormField(
-                      controller: _amountController,
-                      decoration: const InputDecoration(
-                        labelText: 'Monto *',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.attach_money),
-                        suffixText: '₲',
-                      ),
-                      keyboardType: TextInputType.number,
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return 'Ingresa el monto';
-                        final n = double.tryParse(v);
-                        if (n == null) return 'Número inválido';
-                        if (n <= 0) return 'Monto mayor a 0';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-
-                    // 📅 Fecha
-                    InkWell(
-                      onTap: _selectDate,
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Fecha de vencimiento *',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.calendar_today),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
-                            ),
-                            const Icon(Icons.arrow_drop_down),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // 📝 Descripción
-                    TextFormField(
-                      controller: _descriptionController,
-                      decoration: const InputDecoration(
-                        labelText: 'Descripción (opcional)',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.description),
-                      ),
-                      maxLines: 2,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // 🔄 Recurrente
-                    SwitchListTile(
-                      title: const Text('Factura recurrente'),
-                      subtitle: const Text('Se repite cada mes'),
-                      value: _isRecurring,
-                      onChanged: (v) => setState(() => _isRecurring = v),
-                      activeThumbColor: Colors.green,
-                    ),
-
-                    // 🔔 Configuración de recordatorios
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Canales de recordatorio',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    if (_supportsPushNotifications)
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Notificación push'),
-                        subtitle: const Text(
-                          'Alerta local en este dispositivo móvil',
-                        ),
-                        value: _reminderPushEnabled,
-                        onChanged: (value) =>
-                            setState(() => _reminderPushEnabled = value),
-                      ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Correo electrónico'),
-                      subtitle: const Text(
-                        'Se enviará al correo asociado a tu cuenta',
-                      ),
-                      value: _reminderEmailEnabled,
-                      onChanged: (value) =>
-                          setState(() => _reminderEmailEnabled = value),
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Bandeja de BillTracker'),
-                      subtitle: const Text(
-                        'Guardar la alerta en tus notificaciones',
-                      ),
-                      value: _reminderInAppEnabled,
-                      onChanged: (value) =>
-                          setState(() => _reminderInAppEnabled = value),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Text('Anticipación: '),
-                        Expanded(
-                          child: Slider(
-                            value: _reminderDays.toDouble(),
-                            min: 1,
-                            max: 10,
-                            divisions: 9,
-                            label: '$_reminderDays días',
-                            activeColor: Colors.green,
-                            onChanged: (v) =>
-                                setState(() => _reminderDays = v.round()),
-                          ),
-                        ),
-                        Text(
-                          '$_reminderDays días',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(Icons.schedule),
-                        const SizedBox(width: 12),
-                        SizedBox(
-                          width: 56,
-                          child: TextFormField(
-                            controller: _reminderHourController,
-                            keyboardType: TextInputType.number,
-                            textAlign: TextAlign.center,
-                            maxLength: 2,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                            ],
-                            decoration: const InputDecoration(
-                              hintText: 'HH',
-                              counterText: '',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              final hour = int.tryParse(value ?? '');
-                              return hour == null || hour > 23 ? '00-23' : null;
-                            },
-                            onChanged: (_) => _updateReminderTime(),
-                          ),
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 6),
-                          child: Text(':'),
-                        ),
-                        SizedBox(
-                          width: 56,
-                          child: TextFormField(
-                            controller: _reminderMinuteController,
-                            keyboardType: TextInputType.number,
-                            textAlign: TextAlign.center,
-                            maxLength: 2,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                            ],
-                            decoration: const InputDecoration(
-                              hintText: 'MM',
-                              counterText: '',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              final minute = int.tryParse(value ?? '');
-                              return minute == null || minute > 59
-                                  ? '00-59'
-                                  : null;
-                            },
-                            onChanged: (_) => _updateReminderTime(),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Canales de recordatorio',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ),
-                    if (_supportsPushNotifications)
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        secondary: const Icon(Icons.notifications_active),
-                        title: const Text('Notificación en este dispositivo'),
-                        subtitle: const Text(
-                          'Alerta local en Android/iOS, aunque la app esté cerrada',
-                        ),
-                        value: _reminderPushEnabled,
-                        onChanged: (value) =>
-                            setState(() => _reminderPushEnabled = value),
-                      ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      secondary: const Icon(Icons.email_outlined),
-                      title: const Text('Correo electrónico'),
-                      subtitle: const Text(
-                        'Enviar el recordatorio al correo de tu cuenta',
-                      ),
-                      value: _reminderEmailEnabled,
-                      onChanged: (value) =>
-                          setState(() => _reminderEmailEnabled = value),
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      secondary: const Icon(Icons.inbox_outlined),
-                      title: const Text('Bandeja de la aplicación'),
-                      subtitle: const Text(
-                        'Mostrar el recordatorio en Notificaciones',
-                      ),
-                      value: _reminderInAppEnabled,
-                      onChanged: (value) =>
-                          setState(() => _reminderInAppEnabled = value),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // 📊 Estado
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(
-                        labelText: 'Estado',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.info),
-                      ),
-                      initialValue: _selectedStatus,
-                      items: const [
-                        DropdownMenuItem<String>(
-                          // ✅ Especificar tipo
-                          value: 'pending',
-                          child: Row(
-                            children: [
-                              Icon(Icons.pending, color: Colors.orange),
-                              SizedBox(width: 8),
-                              Text('Pendiente'),
-                            ],
-                          ),
-                        ),
-                        DropdownMenuItem<String>(
-                          // ✅ Especificar tipo
-                          value: 'paid',
-                          child: Row(
-                            children: [
-                              Icon(Icons.check_circle, color: Colors.green),
-                              SizedBox(width: 8),
-                              Text('Pagada'),
-                            ],
-                          ),
-                        ),
-                      ],
-                      onChanged: (v) => setState(() => _selectedStatus = v!),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // 🔘 Botón Guardar
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _saveBill,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[700],
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: _isLoading
-                            ? const CircularProgressIndicator(
-                                color: Colors.white,
-                              )
-                            : Text(
-                                _isEditing
-                                    ? 'Actualizar Factura'
-                                    : 'Guardar Factura',
-                                style: const TextStyle(fontSize: 16),
+                            DropdownMenuItem<String>(
+                              // ✅ Especificar tipo
+                              value: 'paid',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.check_circle, color: Colors.green),
+                                  SizedBox(width: 8),
+                                  Text('Pagada'),
+                                ],
                               ),
-                      ),
+                            ),
+                          ],
+                          onChanged: (v) =>
+                              setState(() => _selectedStatus = v!),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // 🔘 Botón Guardar
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _saveBill,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.primary,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: _isLoading
+                                ? const CircularProgressIndicator(
+                                    color: Colors.white,
+                                  )
+                                : Text(
+                                    _isEditing
+                                        ? 'Actualizar Factura'
+                                        : 'Guardar Factura',
+                                    style: const TextStyle(fontSize: 16),
+                                  ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -760,7 +773,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
           ElevatedButton(
             onPressed: _isAddingService ? null : _addNewService,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green[700],
+              backgroundColor: Theme.of(context).colorScheme.primary,
               foregroundColor: Colors.white,
             ),
             child: _isAddingService

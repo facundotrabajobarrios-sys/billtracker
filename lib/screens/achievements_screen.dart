@@ -51,8 +51,6 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Mis Logros'),
-          backgroundColor: Colors.green[700],
-          foregroundColor: Colors.white,
           actions: [
             IconButton(
               icon: const Icon(Icons.refresh),
@@ -64,7 +62,7 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
         body: RefreshIndicator(
           onRefresh: _loadData,
           color: Colors.green,
-          backgroundColor: Colors.white,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           child: isLoading
               ? const Center(child: CircularProgressIndicator())
               : gamification == null
@@ -119,59 +117,82 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
 
   Widget _buildSummaryCard(Gamification gamification) {
     return Card(
-      elevation: 4,
       child: Padding(
         padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 700
+                ? 3
+                : constraints.maxWidth >= 360
+                ? 2
+                : 1;
+            final width = (constraints.maxWidth - (columns - 1) * 16) / columns;
+            Widget stat(
+              String label,
+              String value,
+              String subtitle,
+              Color color,
+            ) => SizedBox(
+              width: width,
+              child: _buildStatItem(label, value, subtitle, color),
+            );
+
+            return Column(
               children: [
-                _buildStatItem(
-                  '🏆 Nivel',
-                  '${gamification.currentLevel}',
-                  Gamification.getLevelName(gamification.currentLevel),
-                  Colors.amber,
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 20,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    stat(
+                      '🏆 Nivel',
+                      '${gamification.currentLevel}',
+                      Gamification.getLevelName(gamification.currentLevel),
+                      Colors.amber,
+                    ),
+                    stat(
+                      '⭐ Puntos',
+                      '${gamification.totalPoints}',
+                      '${gamification.pointsToNextLevel} pts para subir',
+                      Colors.green,
+                    ),
+                    stat(
+                      '🔥 Racha',
+                      '${gamification.streakDays} días',
+                      'Pagos consecutivos',
+                      Colors.orange,
+                    ),
+                  ],
                 ),
-                _buildStatItem(
-                  '⭐ Puntos',
-                  '${gamification.totalPoints}',
-                  '${gamification.pointsToNextLevel} pts para subir',
-                  Colors.green,
-                ),
-                _buildStatItem(
-                  '🔥 Racha',
-                  '${gamification.streakDays} días',
-                  'Pagos consecutivos',
-                  Colors.orange,
+                const Divider(height: 32),
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 20,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    stat(
+                      '📄 Pagadas',
+                      '${gamification.totalPaidBills}',
+                      'Facturas pagadas',
+                      Colors.blue,
+                    ),
+                    stat(
+                      '✅ A tiempo',
+                      '${gamification.onTimePayments}',
+                      'Pagos puntuales',
+                      Colors.green,
+                    ),
+                    stat(
+                      '🏅 Logros',
+                      '${gamification.unlockedBadges.length}',
+                      'Insignias desbloqueadas',
+                      Colors.purple,
+                    ),
+                  ],
                 ),
               ],
-            ),
-            const Divider(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStatItem(
-                  '📄 Pagadas',
-                  '${gamification.totalPaidBills}',
-                  'Facturas pagadas',
-                  Colors.blue,
-                ),
-                _buildStatItem(
-                  '✅ A tiempo',
-                  '${gamification.onTimePayments}',
-                  'Pagos puntuales',
-                  Colors.green,
-                ),
-                _buildStatItem(
-                  '🏅 Logros',
-                  '${gamification.unlockedBadges.length}',
-                  'Insignias desbloqueadas',
-                  Colors.purple,
-                ),
-              ],
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -193,10 +214,18 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
             color: color,
           ),
         ),
-        Text(label, style: const TextStyle(fontSize: 14, color: Colors.grey)),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          textAlign: TextAlign.center,
+        ),
         Text(
           subtitle,
-          style: const TextStyle(fontSize: 10, color: Colors.grey),
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           textAlign: TextAlign.center,
         ),
       ],
@@ -232,7 +261,9 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
               child: LinearProgressIndicator(
                 value: progress,
                 minHeight: 12,
-                backgroundColor: Colors.grey[200],
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHighest,
                 valueColor: AlwaysStoppedAnimation<Color>(
                   progress >= 0.8 ? Colors.green : Colors.amber,
                 ),
@@ -253,8 +284,8 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 220,
         childAspectRatio: 1.1,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
@@ -302,7 +333,9 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
   Widget _buildBadgeCard(AchievementBadge badge) {
     return Card(
       elevation: badge.isUnlocked ? 2 : 0,
-      color: badge.isUnlocked ? Colors.white : Colors.grey[100],
+      color: badge.isUnlocked
+          ? Theme.of(context).colorScheme.surface
+          : Theme.of(context).colorScheme.surfaceContainerHighest,
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
@@ -325,7 +358,9 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
-                  color: badge.isUnlocked ? Colors.black : Colors.grey[500],
+                  color: badge.isUnlocked
+                      ? Theme.of(context).colorScheme.onSurface
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 textAlign: TextAlign.center,
                 maxLines: 2,

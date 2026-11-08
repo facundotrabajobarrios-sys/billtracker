@@ -19,46 +19,59 @@ class AuthService {
   bool get isCurrentUserEmailConfirmed =>
       _client.auth.currentUser?.emailConfirmedAt != null;
 
+  Future<Map<String, dynamic>> _getAdminStatus() async {
+    try {
+      final result = await _client.rpc('get_admin_status');
+      if (result.isEmpty) return const {};
+      return Map<String, dynamic>.from(result.first as Map);
+    } on supabase.PostgrestException catch (error) {
+      if (error.code == '42883' || error.code == 'PGRST202') {
+        return const {};
+      }
+      rethrow;
+    }
+  }
+
   // 📝 Registrar nuevo usuario
   Future<User?> register(String email, String password, String name) async {
-    try {
-      final response = await _client.auth.signUp(
-        email: email,
-        password: password,
-        emailRedirectTo: SupabaseConfig.authRedirectUri,
-        data: {'name': name},
-      );
+    final response = await _client.auth.signUp(
+      email: email,
+      password: password,
+      emailRedirectTo: SupabaseConfig.authRedirectUri,
+      data: {'name': name},
+    );
 
-      if (response.user != null) {
-        final user = User.fromJson({
-          'id': response.user!.id,
-          'email': email,
-          'name': name,
-          'level': 0,
-          'points': 0,
-        });
-
-        // Supabase no crea una sesión hasta que el enlace de confirmación se
-        // consume. Nunca se debe tratar al usuario como autenticado antes.
-        if (response.session != null &&
-            response.user!.emailConfirmedAt != null) {
-          await _ensureProfile(response.user!, name: name);
-          await _saveSession(user);
-          await AuditLogService().record('register');
-        }
-        return user;
-      }
-      return null;
-    } catch (e) {
-      print('❌ Error en registro: $e');
-      return null;
+    final authUser = response.user;
+    if (authUser == null) {
+      throw StateError('Supabase no devolvió una cuenta después del registro.');
     }
+
+    final user = User.fromJson({
+      'id': authUser.id,
+      'email': email,
+      'name': name,
+      'level': 0,
+      'points': 0,
+    });
+
+    // Supabase no crea una sesión hasta que el enlace de confirmación se
+    // consume. Nunca se debe tratar al usuario como autenticado antes.
+    if (response.session != null && authUser.emailConfirmedAt != null) {
+      await _ensureProfile(authUser, name: name);
+      await _saveSession(user);
+      await AuditLogService().record('register');
+    }
+    return user;
   }
 
   // 🔑 Iniciar sesión
   Future<User?> login(String email, String password) async {
+    final loginEmail =
+        email.trim().toLowerCase() == SupabaseConfig.adminUsername
+        ? SupabaseConfig.adminLoginEmail
+        : email.trim();
     final response = await _client.auth.signInWithPassword(
-      email: email,
+      email: loginEmail,
       password: password,
     );
 
@@ -79,7 +92,12 @@ class AuthService {
           .eq('id', authUser.id)
           .single();
 
-      final user = User.fromJson(userData);
+      final role = await _getAdminStatus();
+      final user = User.fromJson({
+        ...userData,
+        'is_admin': role['is_admin'] == true,
+        'must_change_password': role['must_change_password'] == true,
+      });
       await _saveSession(user);
       await AuditLogService().record('login');
       return user;
@@ -108,11 +126,36 @@ class AuthService {
   }
 
   // 🚪 Cerrar sesión
-  Future<void> logout() async {
+  Future<void> logout({bool revokeAllSessions = false}) async {
     await AuditLogService().record('logout');
-    await _client.auth.signOut();
-    // ✅ Eliminar sesión guardada
-    await _clearSession();
+    Object? remoteError;
+    Object? localError;
+    try {
+      await _client.auth.signOut(
+        scope: revokeAllSessions
+            ? supabase.SignOutScope.global
+            : supabase.SignOutScope.local,
+      );
+    } catch (error) {
+      remoteError = error;
+      if (revokeAllSessions) {
+        try {
+          await _client.auth.signOut(scope: supabase.SignOutScope.local);
+        } catch (error) {
+          localError = error;
+          debugPrint('No se pudo limpiar la sesión local de Supabase: $error');
+        }
+      }
+    } finally {
+      await _clearSession();
+    }
+
+    if (remoteError != null) {
+      throw StateError(
+        'Supabase no confirmó ${revokeAllSessions ? 'la revocación remota' : 'el cierre local'}: $remoteError'
+        '${localError == null ? '' : '; tampoco se pudo limpiar la sesión local: $localError'}',
+      );
+    }
   }
 
   // 👤 Obtener usuario actual (primero de Supabase, luego de caché)
@@ -126,7 +169,12 @@ class AuthService {
             .select()
             .eq('id', session.user.id)
             .single();
-        final user = User.fromJson(userData);
+        final role = await _getAdminStatus();
+        final user = User.fromJson({
+          ...userData,
+          'is_admin': role['is_admin'] == true,
+          'must_change_password': role['must_change_password'] == true,
+        });
         await _saveSession(user);
         return user;
       } catch (e) {
@@ -154,6 +202,13 @@ class AuthService {
   Future<void> updatePassword(String password) async {
     await _client.auth.updateUser(supabase.UserAttributes(password: password));
     await AuditLogService().record('password_changed');
+  }
+
+  Future<void> completeInitialAdminPasswordChange(String password) async {
+    await _client.functions.invoke(
+      'admin-password',
+      body: {'password': password},
+    );
   }
 
   Future<void> deleteAccount() async {

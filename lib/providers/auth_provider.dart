@@ -1,19 +1,23 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import '../models/user.dart';
 import '../services/auth_service.dart';
+import '../services/profile_service.dart';
 
 // 🎭 Proveedor de autenticación (maneja el estado)
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
+  final ProfileService _profileService = ProfileService();
   User? _user;
   bool _isLoading = false;
   bool _isInitializing = true;
   bool _registrationNeedsConfirmation = false;
   bool _isPasswordRecovery = false;
   String? _loginError;
+  String? _registrationError;
   late final StreamSubscription _authSubscription;
 
   AuthProvider({bool isPasswordRecovery = false})
@@ -49,9 +53,29 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isInitializing => _isInitializing;
   bool get isAuthenticated => _user != null;
+  bool get isAdmin => _user?.isAdmin == true;
+  bool get mustChangeAdminPassword => _user?.mustChangePassword == true;
   String? get loginError => _loginError;
+  String? get registrationError => _registrationError;
   bool get registrationNeedsConfirmation => _registrationNeedsConfirmation;
   bool get isPasswordRecovery => _isPasswordRecovery;
+
+  Future<AvatarUpdateResult> uploadAvatar(
+    Uint8List bytes,
+    String fileName,
+  ) async {
+    final result = await _profileService.uploadAvatar(bytes, fileName);
+    _user = _user?.copyWith(avatarUrl: result.imageUrl);
+    notifyListeners();
+    return result;
+  }
+
+  Future<AvatarUpdateResult> deleteAvatar() async {
+    final result = await _profileService.deleteAvatar();
+    _user = _user?.copyWith(clearAvatarUrl: true);
+    notifyListeners();
+    return result;
+  }
 
   void markPasswordRecovery() {
     _isPasswordRecovery = true;
@@ -94,6 +118,8 @@ class AuthProvider extends ChangeNotifier {
   // 📝 Registrar usuario
   Future<bool> register(String email, String password, String name) async {
     _isLoading = true;
+    _registrationError = null;
+    _registrationNeedsConfirmation = false;
     notifyListeners();
 
     try {
@@ -112,6 +138,11 @@ class AuthProvider extends ChangeNotifier {
       return false;
     } catch (e) {
       print('❌ Error en registro: $e');
+      _registrationError = switch (e) {
+        supabase.AuthException() => e.message,
+        StateError() => e.message,
+        _ => e.toString(),
+      };
       _isLoading = false;
       notifyListeners();
       return false;
@@ -119,10 +150,15 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // 🚪 Cerrar sesión
-  Future<void> logout() async {
-    await _authService.logout();
+  Future<void> logout({bool revokeAllSessions = false}) async {
     _user = null;
     notifyListeners();
+    try {
+      await _authService.logout(revokeAllSessions: revokeAllSessions);
+    } finally {
+      _user = null;
+      notifyListeners();
+    }
   }
 
   Future<void> updatePassword(String password) async {
@@ -134,6 +170,18 @@ class AuthProvider extends ChangeNotifier {
       _isPasswordRecovery = false;
 
       // Keep the recovery session active and refresh the application profile.
+      await loadUser();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> completeInitialAdminPasswordChange(String password) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _authService.completeInitialAdminPasswordChange(password);
       await loadUser();
     } finally {
       _isLoading = false;

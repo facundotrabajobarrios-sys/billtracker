@@ -1,5 +1,6 @@
 // ignore_for_file: unused_import
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -9,7 +10,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../providers/auth_provider.dart';
 import '../providers/gamification_provider.dart';
@@ -255,7 +255,7 @@ class _HomeContentState extends State<_HomeContent> {
   int _unreadCount = 0;
   String? _loadError;
   String? _systemAnnouncement;
-  List<Map<String, dynamic>> _activeAnnouncements = [];
+  Timer? _systemNoticeExpiryTimer;
 
   // Filtros: por defecto últimos 30 días
   late DateTime _startDate;
@@ -274,24 +274,25 @@ class _HomeContentState extends State<_HomeContent> {
 
   Future<void> _loadSystemAnnouncement() async {
     try {
-      final notice = await Supabase.instance.client.rpc(
-        'get_public_app_notice',
-      );
+      final notice = await _notiService.getActiveSystemNotice();
       if (!mounted) return;
+      _systemNoticeExpiryTimer?.cancel();
       setState(() {
-        _systemAnnouncement = notice is String && notice.trim().isNotEmpty
-            ? notice.trim()
-            : null;
+        _systemAnnouncement = notice?['message'] as String?;
       });
+      final secondsRemaining = notice?['expires_in_seconds'] as int?;
+      if (_systemAnnouncement != null &&
+          secondsRemaining != null &&
+          secondsRemaining > 0) {
+        _systemNoticeExpiryTimer = Timer(
+          Duration(seconds: secondsRemaining),
+          () {
+            if (mounted) setState(() => _systemAnnouncement = null);
+          },
+        );
+      }
     } catch (error) {
       debugPrint('No se pudo cargar el aviso del sistema: $error');
-    }
-    try {
-      final announcements = await _notiService.getActiveAnnouncements();
-      if (!mounted) return;
-      setState(() => _activeAnnouncements = announcements);
-    } catch (error) {
-      debugPrint('No se pudieron cargar los comunicados: $error');
     }
   }
 
@@ -685,6 +686,12 @@ class _HomeContentState extends State<_HomeContent> {
   }
 
   @override
+  void dispose() {
+    _systemNoticeExpiryTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
 
@@ -837,59 +844,6 @@ class _HomeContentState extends State<_HomeContent> {
                                 ),
                               ],
                             ),
-                          ),
-                        ),
-                      ],
-                      for (final announcement in _activeAnnouncements) ...[
-                        const SizedBox(height: 12),
-                        Card(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.secondaryContainer,
-                          child: ListTile(
-                            leading: Icon(
-                              Icons.campaign_outlined,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSecondaryContainer,
-                            ),
-                            title: Text(announcement['title'] as String? ?? ''),
-                            subtitle: Text(
-                              announcement['message'] as String? ?? '',
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            trailing: announcement['is_read'] == true
-                                ? null
-                                : const Icon(Icons.fiber_new_outlined),
-                            onTap: announcement['is_read'] == true
-                                ? null
-                                : () async {
-                                    final id = announcement['id'] as String?;
-                                    if (id == null) return;
-                                    final read = await _notiService.markAsRead(
-                                      id,
-                                    );
-                                    if (!mounted || !context.mounted) return;
-                                    if (read) {
-                                      setState(() {
-                                        announcement['is_read'] = true;
-                                        if (_unreadCount > 0) {
-                                          _unreadCount--;
-                                        }
-                                      });
-                                    } else {
-                                      ScaffoldMessenger.of(context)
-                                        ..hideCurrentSnackBar()
-                                        ..showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'No se pudo marcar el comunicado como leído.',
-                                            ),
-                                          ),
-                                        );
-                                    }
-                                  },
                           ),
                         ),
                       ],

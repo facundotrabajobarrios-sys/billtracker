@@ -54,6 +54,24 @@ class NotificationService {
     return response.whereType<Map>().map(Map<String, dynamic>.from).toList();
   }
 
+  Future<Map<String, dynamic>?> getActiveSystemNotice() async {
+    final response = await _client.rpc('get_active_system_notice');
+    if (response is! List) {
+      throw const FormatException(
+        'La respuesta del aviso del sistema no es válida.',
+      );
+    }
+    if (response.isEmpty) return null;
+
+    final row = response.first;
+    if (row is! Map) {
+      throw const FormatException(
+        'El aviso del sistema tiene un formato no válido.',
+      );
+    }
+    return Map<String, dynamic>.from(row);
+  }
+
   Future<List<NotificationModel>> getUnreadNotifications(String? userId) async {
     try {
       final resolvedUserId = userId ?? await _getCurrentUserId();

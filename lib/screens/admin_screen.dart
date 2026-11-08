@@ -1340,7 +1340,7 @@ class _AdminSettingsScreenState extends State<_AdminSettingsScreen> {
         ),
         const SizedBox(height: 8),
         const Text(
-          'Publica un aviso breve que se mostrará en el dashboard de los usuarios web y móviles. Déjalo vacío para ocultarlo.',
+          'Publica un aviso operativo que aparecerá en el dashboard durante 24 horas y también quedará en el historial de notificaciones. Déjalo vacío para ocultar el aviso activo.',
         ),
         const SizedBox(height: 20),
         TextField(

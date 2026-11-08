@@ -7,7 +7,7 @@ class NotificationModel {
   final String? billId;
   final String title;
   final String message;
-  final String type; // 'reminder', 'warning', 'success', 'info'
+  final String type; // reminder, warning, success, info, announcement, system
   final bool isRead;
   final DateTime? scheduledAt;
   final DateTime? sentAt;
@@ -87,6 +87,10 @@ class NotificationModel {
         return Colors.orange;
       case 'reminder':
         return Colors.blue;
+      case 'announcement':
+        return Colors.deepPurple;
+      case 'system':
+        return Colors.teal;
       default:
         return Colors.grey;
     }

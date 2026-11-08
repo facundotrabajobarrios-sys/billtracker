@@ -589,11 +589,9 @@ async function updateSettings(context: AdminContext, body: Record<string, unknow
   if (announcement.length > 500) {
     return jsonResponse({ error: "Announcement must be 500 characters or fewer" }, 400);
   }
-  const { error } = await context.client.from("admin_settings").upsert({
-    key: "public_announcement",
-    value: announcement,
-    updated_by: context.userId,
-    updated_at: new Date().toISOString(),
+  const { error } = await context.client.rpc("admin_update_system_notice", {
+    p_admin_user_id: context.userId,
+    p_message: announcement,
   });
   if (error) throw error;
   await writeAudit(context, "system_announcement_updated", {

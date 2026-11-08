@@ -1,4 +1,5 @@
 import 'package:billtracker/models/notification.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -34,5 +35,18 @@ void main() {
         expect(notification.toJson()['type'], 'success');
       },
     );
+
+    test('serializes a system notice for the notification history', () {
+      final notification = NotificationModel(
+        id: '',
+        userId: 'user-id',
+        title: 'Aviso del sistema',
+        message: 'Mantenimiento programado',
+        type: 'system',
+      );
+
+      expect(notification.toJson()['type'], 'system');
+      expect(notification.typeColor, Colors.teal);
+    });
   });
 }

@@ -554,19 +554,28 @@ class _AddBillScreenState extends State<AddBillScreen> {
                             const Icon(Icons.schedule),
                             const SizedBox(width: 12),
                             SizedBox(
-                              width: 56,
+                              width: 84,
                               child: TextFormField(
                                 controller: _reminderHourController,
                                 keyboardType: TextInputType.number,
                                 textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                ),
                                 maxLength: 2,
                                 inputFormatters: [
                                   FilteringTextInputFormatter.digitsOnly,
                                 ],
                                 decoration: const InputDecoration(
-                                  hintText: 'HH',
+                                  labelText: 'Hora',
+                                  alignLabelWithHint: true,
                                   counterText: '',
                                   border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 18,
+                                  ),
                                 ),
                                 validator: (value) {
                                   final hour = int.tryParse(value ?? '');
@@ -578,23 +587,32 @@ class _AddBillScreenState extends State<AddBillScreen> {
                               ),
                             ),
                             const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 6),
+                              padding: EdgeInsets.symmetric(horizontal: 10),
                               child: Text(':'),
                             ),
                             SizedBox(
-                              width: 56,
+                              width: 84,
                               child: TextFormField(
                                 controller: _reminderMinuteController,
                                 keyboardType: TextInputType.number,
                                 textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                ),
                                 maxLength: 2,
                                 inputFormatters: [
                                   FilteringTextInputFormatter.digitsOnly,
                                 ],
                                 decoration: const InputDecoration(
-                                  hintText: 'MM',
+                                  labelText: 'Minutos',
+                                  alignLabelWithHint: true,
                                   counterText: '',
                                   border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 18,
+                                  ),
                                 ),
                                 validator: (value) {
                                   final minute = int.tryParse(value ?? '');

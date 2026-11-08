@@ -609,51 +609,6 @@ class _AddBillScreenState extends State<AddBillScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'Canales de recordatorio',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ),
-                        if (_supportsPushNotifications)
-                          SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            secondary: const Icon(Icons.notifications_active),
-                            title: const Text(
-                              'Notificación en este dispositivo',
-                            ),
-                            subtitle: const Text(
-                              'Alerta local en Android/iOS, aunque la app esté cerrada',
-                            ),
-                            value: _reminderPushEnabled,
-                            onChanged: (value) =>
-                                setState(() => _reminderPushEnabled = value),
-                          ),
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          secondary: const Icon(Icons.email_outlined),
-                          title: const Text('Correo electrónico'),
-                          subtitle: const Text(
-                            'Enviar el recordatorio al correo de tu cuenta',
-                          ),
-                          value: _reminderEmailEnabled,
-                          onChanged: (value) =>
-                              setState(() => _reminderEmailEnabled = value),
-                        ),
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          secondary: const Icon(Icons.inbox_outlined),
-                          title: const Text('Bandeja de la aplicación'),
-                          subtitle: const Text(
-                            'Mostrar el recordatorio en Notificaciones',
-                          ),
-                          value: _reminderInAppEnabled,
-                          onChanged: (value) =>
-                              setState(() => _reminderInAppEnabled = value),
-                        ),
-                        const SizedBox(height: 16),
-
                         // 📊 Estado
                         DropdownButtonFormField<String>(
                           decoration: const InputDecoration(

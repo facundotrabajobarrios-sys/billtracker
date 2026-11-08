@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import '../models/gamification.dart';
 import '../models/bill.dart';
+import '../models/notification.dart';
 import '../services/notification_service.dart';
 
 // 🏆 Servicio de Gamificación
@@ -300,14 +301,20 @@ class GamificationService {
         ),
       );
 
-      // ✅ Si no hay billId, pasar null
-      await notificationService.createBillReminder(
-        userId,
-        null, // ✅ Pasar null en lugar de ''
-        '🎉 ¡Nueva Insignia Desbloqueada!',
-        'Has obtenido "${badge.name}" - ${badge.description}',
+      final notification = await notificationService.createNotification(
+        NotificationModel(
+          id: '',
+          userId: userId,
+          title: '¡Nueva insignia desbloqueada!',
+          message: 'Has obtenido "${badge.name}" - ${badge.description}',
+          type: 'success',
+        ),
       );
-      print('🔍 createBillReminder llamado con null');
+      if (notification == null) {
+        debugPrint(
+          'No se pudo guardar la notificación de la insignia $badgeId.',
+        );
+      }
     }
   }
 }

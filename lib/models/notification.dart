@@ -48,16 +48,21 @@ class NotificationModel {
 
   // 📤 Convertir a JSON - CORREGIDO
   Map<String, dynamic> toJson() {
+    final scheduledAt = this.scheduledAt;
+    final sentAt = this.sentAt;
+    final createdAt = this.createdAt;
     final map = <String, dynamic>{
       'user_id': userId,
       'title': title,
       'message': message,
       'type': type,
       'is_read': isRead,
-      'scheduled_at': scheduledAt?.toIso8601String(),
-      'sent_at': sentAt?.toIso8601String(),
-      'created_at': createdAt?.toIso8601String(),
     };
+    if (scheduledAt != null) {
+      map['scheduled_at'] = scheduledAt.toIso8601String();
+    }
+    if (sentAt != null) map['sent_at'] = sentAt.toIso8601String();
+    if (createdAt != null) map['created_at'] = createdAt.toIso8601String();
 
     // ✅ SOLO enviar id si NO está vacío (Supabase genera UUID)
     if (id.isNotEmpty) {

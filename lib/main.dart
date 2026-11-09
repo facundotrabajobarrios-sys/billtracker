@@ -22,6 +22,7 @@ import 'utils/app_theme.dart';
 import 'utils/app_navigator.dart';
 
 bool _initialPasswordRecoveryLink = false;
+bool _initialEmailChangeLink = false;
 String? _webAuthError;
 
 Future<void> _exchangeWebAuthCode() async {
@@ -46,15 +47,22 @@ Future<void> _exchangeWebAuthCode() async {
     final tokenHash = parameters['token_hash'];
     final linkType = parameters['type'];
     if (tokenHash != null) {
-      if (linkType != 'recovery' && linkType != 'signup') {
+      if (linkType != 'recovery' &&
+          linkType != 'signup' &&
+          linkType != 'email_change') {
         _webAuthError = 'El tipo de enlace de autenticación no es válido.';
         return;
       }
       await auth.verifyOTP(
         tokenHash: tokenHash,
-        type: linkType == 'recovery' ? OtpType.recovery : OtpType.signup,
+        type: switch (linkType) {
+          'recovery' => OtpType.recovery,
+          'email_change' => OtpType.emailChange,
+          _ => OtpType.signup,
+        },
       );
       _initialPasswordRecoveryLink = linkType == 'recovery';
+      _initialEmailChangeLink = linkType == 'email_change';
       if (isRecoveryRoute &&
           (!_initialPasswordRecoveryLink || auth.currentSession == null)) {
         _webAuthError =
@@ -70,6 +78,9 @@ Future<void> _exchangeWebAuthCode() async {
           linkType == 'recovery') {
         _initialPasswordRecoveryLink = true;
       }
+      _initialEmailChangeLink =
+          response.redirectType == AuthChangeEvent.userUpdated.name ||
+          linkType == 'email_change';
       if (isRecoveryRoute &&
           (!_initialPasswordRecoveryLink || auth.currentSession == null)) {
         _webAuthError =
@@ -80,10 +91,13 @@ Future<void> _exchangeWebAuthCode() async {
 
     final accessToken = parameters['access_token'];
     final refreshToken = parameters['refresh_token'];
-    if (linkType == 'recovery' && accessToken != null && refreshToken != null) {
+    if ((linkType == 'recovery' || linkType == 'email_change') &&
+        accessToken != null &&
+        refreshToken != null) {
       await auth.setSession(refreshToken, accessToken: accessToken);
       _initialPasswordRecoveryLink = auth.currentSession != null;
-      if (!_initialPasswordRecoveryLink) {
+      _initialEmailChangeLink = linkType == 'email_change';
+      if (linkType == 'recovery' && !_initialPasswordRecoveryLink) {
         _webAuthError =
             'No se pudo validar el enlace de recuperación. Solicita uno nuevo.';
       }
@@ -165,6 +179,7 @@ Future<void> _initAuthDeepLinks() async {
         : Uri.splitQueryString(uri.fragment);
     final parameters = {...fragment, ...uri.queryParameters};
     var isRecovery = parameters['type'] == 'recovery';
+    final isEmailChange = parameters['type'] == 'email_change';
     void markRecovery() {
       _initialPasswordRecoveryLink = true;
       final context = navigatorKey.currentContext;
@@ -187,8 +202,11 @@ Future<void> _initAuthDeepLinks() async {
     }
 
     final tokenHash = parameters['token_hash'];
-    if (isRecovery && tokenHash != null) {
-      await client.verifyOTP(tokenHash: tokenHash, type: OtpType.recovery);
+    if ((isRecovery || isEmailChange) && tokenHash != null) {
+      await client.verifyOTP(
+        tokenHash: tokenHash,
+        type: isRecovery ? OtpType.recovery : OtpType.emailChange,
+      );
       return;
     }
 
@@ -269,7 +287,10 @@ class MyApp extends StatelessWidget {
                         'El enlace no se validó. Solicita uno nuevo para cambiar tu contraseña.',
                   )
                 : isWebCallback
-                ? AuthCallbackScreen(processingError: _webAuthError)
+                ? AuthCallbackScreen(
+                    processingError: _webAuthError,
+                    isEmailChange: _initialEmailChangeLink,
+                  )
                 : authProvider.isPasswordRecovery
                 ? const UpdatePasswordScreen()
                 : isAuth

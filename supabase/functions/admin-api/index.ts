@@ -190,6 +190,10 @@ async function billsList(context: AdminContext, body: Record<string, unknown>) {
   const status = ["pending", "paid", "overdue"].includes(String(body.status))
     ? String(body.status)
     : "";
+  const sortBy = body.sortBy === "amount" ? "amount" : "due_date";
+  const ascending = typeof body.ascending === "boolean"
+    ? body.ascending
+    : true;
   let query = context.client
     .from("bills")
     .select("id,user_id,service_id,category_id,amount,currency,due_date,paid_date,status,description,created_at", { count: "exact" });
@@ -211,7 +215,7 @@ async function billsList(context: AdminContext, body: Record<string, unknown>) {
     query = query.or(filters.join(","));
   }
   const { data, count, error } = await query
-    .order("due_date", { ascending: true })
+    .order(sortBy, { ascending })
     .range(page * pageSize, page * pageSize + pageSize - 1);
   if (error) throw error;
 
@@ -579,7 +583,23 @@ async function getSettings(context: AdminContext) {
     .eq("key", "public_announcement")
     .single();
   if (error) throw error;
-  return { announcement: data.value, updatedAt: data.updated_at };
+  const updatedAt = Date.parse(data.updated_at);
+  const expired = typeof data.value === "string" &&
+    data.value.length > 0 &&
+    Number.isFinite(updatedAt) &&
+    Date.now() - updatedAt >= 24 * 60 * 60 * 1000;
+  if (expired) {
+    const { error: clearError } = await context.client
+      .from("admin_settings")
+      .update({ value: "" })
+      .eq("key", "public_announcement")
+      .eq("updated_at", data.updated_at);
+    if (clearError) throw clearError;
+  }
+  return {
+    announcement: expired ? "" : data.value,
+    updatedAt: expired ? null : data.updated_at,
+  };
 }
 
 async function updateSettings(context: AdminContext, body: Record<string, unknown>) {
@@ -589,7 +609,7 @@ async function updateSettings(context: AdminContext, body: Record<string, unknow
   if (announcement.length > 500) {
     return jsonResponse({ error: "Announcement must be 500 characters or fewer" }, 400);
   }
-  const { error } = await context.client.rpc("admin_update_system_notice", {
+  const { data: updatedAt, error } = await context.client.rpc("admin_update_system_notice", {
     p_admin_user_id: context.userId,
     p_message: announcement,
   });
@@ -597,7 +617,129 @@ async function updateSettings(context: AdminContext, body: Record<string, unknow
   await writeAudit(context, "system_announcement_updated", {
     metadata: { enabled: announcement.length > 0 },
   });
-  return { updated: true, announcement };
+  return { updated: true, announcement, updatedAt };
+}
+
+async function startSystemBackup(context: AdminContext) {
+  const token = Deno.env.get("GITHUB_BACKUP_TOKEN");
+  if (!token) {
+    return jsonResponse({
+      error: "El respaldo no está configurado. El administrador del sistema debe completar la configuración de GitHub Actions.",
+    }, 503);
+  }
+
+  const id = crypto.randomUUID();
+  const { error: insertError } = await context.client
+    .from("admin_system_backups")
+    .insert({ id, requested_by: context.userId, status: "queued" });
+  if (insertError) throw insertError;
+  try {
+    await writeAudit(context, "system_backup_requested", {
+      metadata: { backupId: id },
+    });
+  } catch (error) {
+    const { error: updateError } = await context.client
+      .from("admin_system_backups")
+      .update({
+        status: "failed",
+        error_message: "No se pudo registrar la solicitud de respaldo.",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+    if (updateError) throw updateError;
+    throw error;
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(
+      "https://api.github.com/repos/facundotrabajobarrios-sys/billtracker/actions/workflows/system-backup.yml/dispatches",
+      {
+        method: "POST",
+        headers: {
+          "Accept": "application/vnd.github+json",
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        body: JSON.stringify({
+          ref: "main",
+          inputs: { backup_id: id },
+        }),
+      },
+    );
+  } catch (error) {
+    const { error: updateError } = await context.client
+      .from("admin_system_backups")
+      .update({
+        status: "failed",
+        error_message: "No se pudo conectar con GitHub Actions.",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+    if (updateError) throw updateError;
+    throw error;
+  }
+  if (!response.ok) {
+    const responseText = await response.text();
+    console.error("Could not start GitHub backup workflow:", response.status, responseText);
+    const { error: updateError } = await context.client
+      .from("admin_system_backups")
+      .update({
+        status: "failed",
+        error_message: "No se pudo iniciar el proceso de respaldo.",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+    if (updateError) throw updateError;
+    return jsonResponse({
+      error: "No se pudo iniciar el respaldo. Revisa la configuración del workflow y su token.",
+    }, 502);
+  }
+
+  return { backupId: id, status: "queued" };
+}
+
+async function systemBackupStatus(
+  context: AdminContext,
+  body: Record<string, unknown>,
+) {
+  if (typeof body.backupId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+        .test(body.backupId)) {
+    return jsonResponse({ error: "Invalid backup ID" }, 400);
+  }
+
+  const { data, error } = await context.client
+    .from("admin_system_backups")
+    .select("id,status,error_message,object_path,created_at,completed_at")
+    .eq("id", body.backupId)
+    .eq("requested_by", context.userId)
+    .single();
+  if (error) throw error;
+
+  if (data.status !== "completed" || !data.object_path) {
+    return {
+      backupId: data.id,
+      status: data.status,
+      error: data.error_message,
+      createdAt: data.created_at,
+      completedAt: data.completed_at,
+    };
+  }
+
+  const { data: signed, error: signedUrlError } = await context.client.storage
+    .from("system-backups")
+    .createSignedUrl(data.object_path, 300);
+  if (signedUrlError) throw signedUrlError;
+  return {
+    backupId: data.id,
+    status: data.status,
+    createdAt: data.created_at,
+    completedAt: data.completed_at,
+    downloadUrl: signed.signedUrl,
+    fileName: `billtracker-backup-${data.id}.zip`,
+  };
 }
 
 function catalogTable(entity: unknown): "services" | "categories" | null {
@@ -877,6 +1019,10 @@ Deno.serve(async (request) => {
         return respond(await getSettings(context));
       case "update_settings":
         return respond(await updateSettings(context, body));
+      case "start_system_backup":
+        return respond(await startSystemBackup(context));
+      case "system_backup_status":
+        return respond(await systemBackupStatus(context, body));
       case "catalog":
         return respond(await catalogList(context, body));
       case "save_catalog_item":

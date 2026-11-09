@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AdminService {
@@ -38,6 +41,30 @@ class AdminService {
 
   Future<Map<String, dynamic>> getDashboard() => _invoke('dashboard');
 
+  Future<String> startSystemBackup() async {
+    final result = await _invoke('start_system_backup');
+    final backupId = result['backupId'];
+    if (backupId is! String || backupId.isEmpty) {
+      throw const FormatException('No se recibió el identificador del backup.');
+    }
+    return backupId;
+  }
+
+  Future<Map<String, dynamic>> getSystemBackupStatus(String backupId) =>
+      _invoke('system_backup_status', {'backupId': backupId});
+
+  Future<Uint8List> downloadSystemBackup(String url) async {
+    final response = await http
+        .get(Uri.parse(url))
+        .timeout(const Duration(minutes: 10));
+    if (response.statusCode != 200) {
+      throw AdminServiceException(
+        'No se pudo descargar el backup (HTTP ${response.statusCode}).',
+      );
+    }
+    return response.bodyBytes;
+  }
+
   Future<Map<String, dynamic>> getUsers({
     int page = 0,
     String search = '',
@@ -70,11 +97,15 @@ class AdminService {
     int page = 0,
     String search = '',
     String status = '',
+    String sortBy = 'due_date',
+    bool ascending = true,
   }) => _invoke('bills', {
     'page': page,
     'pageSize': 25,
     'search': search,
     'status': status,
+    'sortBy': sortBy,
+    'ascending': ascending,
   });
 
   Future<void> updateUserName(String userId, String name) async {
@@ -134,9 +165,8 @@ class AdminService {
 
   Future<Map<String, dynamic>> getSettings() => _invoke('get_settings');
 
-  Future<void> updateAnnouncement(String announcement) async {
-    await _invoke('update_settings', {'announcement': announcement});
-  }
+  Future<Map<String, dynamic>> updateAnnouncement(String announcement) =>
+      _invoke('update_settings', {'announcement': announcement});
 
   Future<List<Map<String, dynamic>>> getCatalog(String entity) async {
     final result = await _invoke('catalog', {'entity': entity});

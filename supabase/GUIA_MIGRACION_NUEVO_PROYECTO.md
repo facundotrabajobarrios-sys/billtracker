@@ -159,6 +159,15 @@ Los dos destinos deben permanecer en la lista de Redirect URLs permitidas.
 Los enlaces son de un solo uso y caducan según el tiempo configurado en Auth;
 si un enlace vence o ya se utilizó, solicita uno nuevo.
 
+Para el cambio de correo, configura la plantilla **Change Email Address** con
+`{{ .ConfirmationURL }}` como destino del botón. La aplicación solicita que
+Supabase redirija a `/auth/callback`, y ese callback valida el tipo
+`email_change`. Si se personaliza la plantilla con un enlace directo, usa el
+destino completo
+`https://facundotrabajobarrios-sys.github.io/billtracker/auth/callback` y
+conserva los parámetros de confirmación de Supabase; no redirijas al dominio
+`github.io` sin `/billtracker/`.
+
 ## 5. Desplegar las Edge Functions y configurar secretos
 
 Las fuentes están en `supabase/functions/` y la copia del backup en
@@ -192,8 +201,9 @@ reales; el remitente de prueba puede tener restricciones.
 
 ## 6. Verificar el Cron y las notificaciones
 
-La migración crea el Cron `bill-reminders-every-minute`. Compruébalo en
-**Integrations → Cron Jobs** o ejecuta:
+Las migraciones crean los Cron `bill-reminders-every-minute`,
+`announcement-emails-every-minute` y `expire-public-system-notice`.
+Compruébalos en **Integrations → Cron Jobs** o ejecuta:
 
 ```sql
 select jobid, jobname, schedule, active
@@ -205,12 +215,60 @@ Debe estar activo y ejecutar cada minuto (`* * * * *`). Revisa el historial de
 ejecuciones y los logs de `send-bill-reminders` después de crear una factura
 pendiente con un recordatorio próximo.
 
+El Cron `expire-public-system-notice` borra el aviso operativo activo cuando
+cumple 24 horas. La aplicación también deja de mostrarlo en el dashboard al
+cumplirse ese plazo, aunque se esté ejecutando antes de la siguiente ejecución
+del Cron.
+
 - Correo: revisa los logs de Resend, bandeja de entrada y Spam.
 - Bandeja interna: consulta `public.notifications`.
 - Android/iOS: concede permisos; son notificaciones locales del dispositivo.
 - Web: muestra la bandeja interna, pero no implementa push del navegador.
 
-## 7. Cambiar las credenciales públicas en Flutter
+## 7. Configurar el backup desde el panel de administración
+
+El botón **Backup** solicita un workflow de GitHub Actions. Este genera un
+archivo ZIP con el esquema y los datos de `public`, las funciones SQL, triggers,
+políticas RLS, migraciones y fuentes de Edge Functions. El archivo queda en el
+bucket privado `system-backups`; el administrador recibe un enlace temporal y
+puede elegir dónde guardarlo desde el selector nativo de la app. En web, la
+ubicación la controla el navegador; activa **Preguntar dónde guardar cada
+archivo** en su configuración de descargas para que pregunte.
+
+Este backup **no** incluye usuarios de Supabase Auth, archivos de Storage,
+secretos de Vault, credenciales, SMTP ni configuración del proyecto. El ZIP
+contiene datos privados: guárdalo de forma segura.
+
+Después de aplicar `202611090005_admin_system_backups.sql`, configura:
+
+1. En **Settings → Secrets and variables → Actions** del repositorio GitHub,
+   agrega estos *repository secrets*:
+   - `SUPABASE_URL`: URL del proyecto Supabase.
+   - `SUPABASE_SERVICE_ROLE_KEY`: clave `service_role` del proyecto. Solo se
+     usa en GitHub Actions para actualizar el estado y subir el ZIP privado.
+   - `SUPABASE_DB_URL`: cadena de conexión PostgreSQL con permisos para exportar
+     el esquema `public`; usa la conexión directa o el pooler de sesión, no el
+     pooler de transacciones.
+2. Crea un fine-grained personal access token de GitHub con acceso únicamente
+   a este repositorio y permiso **Actions: Read and write**. Configúralo en
+   Supabase Edge Functions como `GITHUB_BACKUP_TOKEN`:
+
+   ```powershell
+   npx supabase secrets set GITHUB_BACKUP_TOKEN="TOKEN_GITHUB"
+   ```
+
+3. Despliega la función `admin-api` después de aplicar la migración. No pongas
+   ninguno de estos secretos en Flutter, en GitHub Pages o dentro del ZIP.
+4. En la sección **Backup** de la app, pulsa **Crear y descargar backup**.
+   Espera a que termine el workflow; luego elige dónde guardar el ZIP (o usa la
+   preferencia de descargas del navegador en web).
+
+Para restaurar el archivo, revisa `database/schema.sql` y `database/data.sql`
+incluidos en el ZIP y restaura primero en un proyecto Supabase de prueba. Despliega
+las Edge Functions desde `edge-functions/` y verifica las variables privadas
+por separado; nunca se restauran junto con el backup.
+
+## 8. Cambiar las credenciales públicas en Flutter
 
 En `lib/config/supabase_config.dart`, sustituye `url` y `anonKey` por el Project
 URL y la clave publicable/anon del proyecto nuevo. No coloques ahí una clave

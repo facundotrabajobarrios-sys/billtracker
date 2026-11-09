@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../config/supabase_config.dart';
+
 class AvatarUpdateResult {
   const AvatarUpdateResult({
     required this.imageUrl,
@@ -46,6 +48,7 @@ class ProfileService {
     if (cleanEmail != authUser.email?.toLowerCase()) {
       final response = await _client.auth.updateUser(
         UserAttributes(email: cleanEmail),
+        emailRedirectTo: SupabaseConfig.authRedirectUri,
       );
       emailConfirmationPending = response.user?.newEmail != null;
     }

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:fl_chart/fl_chart.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -40,6 +43,7 @@ class _AdminScreenState extends State<AdminScreen> {
     ('Usuarios', Icons.people_outline),
     ('Facturas', Icons.receipt_long_outlined),
     ('Gestión', Icons.tune_outlined),
+    ('Backup', Icons.backup_outlined),
   ];
   int _selectedIndex = 0;
   bool _loggingOut = false;
@@ -66,6 +70,8 @@ class _AdminScreenState extends State<AdminScreen> {
         return const _AdminBillsScreen();
       case 3:
         return const _AdminManagementScreen();
+      case 4:
+        return const _AdminBackupScreen();
       default:
         return const _AdminDashboard();
     }
@@ -954,8 +960,11 @@ class _AdminBillsScreen extends StatefulWidget {
 class _AdminBillsScreenState extends State<_AdminBillsScreen> {
   final _service = AdminService();
   final _search = TextEditingController();
+  Timer? _searchDebounce;
   List<Map<String, dynamic>> _bills = [];
   String _status = '';
+  String _sortBy = 'due_date';
+  bool _ascending = true;
   bool _loading = true;
   Object? _error;
   int _page = 0;
@@ -969,6 +978,7 @@ class _AdminBillsScreenState extends State<_AdminBillsScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _search.dispose();
     super.dispose();
   }
@@ -983,6 +993,8 @@ class _AdminBillsScreenState extends State<_AdminBillsScreen> {
         page: _page,
         search: _search.text,
         status: _status,
+        sortBy: _sortBy,
+        ascending: _ascending,
       );
       _bills = _asMapList(result['rows']);
       _total = _asInt(result['total']);
@@ -1095,38 +1107,85 @@ class _AdminBillsScreenState extends State<_AdminBillsScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
-          child: Row(
+          child: Column(
             children: [
-              Expanded(
-                child: TextField(
-                  controller: _search,
-                  decoration: const InputDecoration(
-                    hintText: 'Buscar descripción o ID de usuario',
-                    prefixIcon: Icon(Icons.search),
-                  ),
-                  onSubmitted: (_) {
-                    _page = 0;
-                    _load();
-                  },
+              TextField(
+                controller: _search,
+                decoration: const InputDecoration(
+                  hintText: 'Buscar por nombre de usuario, descripción o ID',
+                  prefixIcon: Icon(Icons.search),
                 ),
-              ),
-              const SizedBox(width: 8),
-              DropdownButton<String>(
-                value: _status,
-                hint: const Text('Estado'),
-                items: const [
-                  DropdownMenuItem(value: '', child: Text('Todos')),
-                  DropdownMenuItem(value: 'pending', child: Text('Pendientes')),
-                  DropdownMenuItem(value: 'paid', child: Text('Pagadas')),
-                  DropdownMenuItem(value: 'overdue', child: Text('Vencidas')),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _status = value ?? '';
-                    _page = 0;
-                  });
-                  _load();
+                onChanged: (_) {
+                  _searchDebounce?.cancel();
+                  _searchDebounce = Timer(
+                    const Duration(milliseconds: 300),
+                    () {
+                      _page = 0;
+                      _load();
+                    },
+                  );
                 },
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                children: [
+                  DropdownButton<String>(
+                    value: _status,
+                    items: const [
+                      DropdownMenuItem(value: '', child: Text('Todos')),
+                      DropdownMenuItem(
+                        value: 'pending',
+                        child: Text('Pendientes'),
+                      ),
+                      DropdownMenuItem(value: 'paid', child: Text('Pagadas')),
+                      DropdownMenuItem(
+                        value: 'overdue',
+                        child: Text('Vencidas'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        _status = value ?? '';
+                        _page = 0;
+                      });
+                      _load();
+                    },
+                  ),
+                  DropdownButton<String>(
+                    value: _sortBy == 'amount'
+                        ? (_ascending ? 'amount_asc' : 'amount_desc')
+                        : 'due_date',
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'due_date',
+                        child: Text('Ordenar: vencimiento'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'amount_asc',
+                        child: Text('Monto: menor a mayor'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'amount_desc',
+                        child: Text('Monto: mayor a menor'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() {
+                        _sortBy = value == 'due_date' ? 'due_date' : 'amount';
+                        _ascending = switch (value) {
+                          'amount_asc' => true,
+                          'amount_desc' => false,
+                          _ => true,
+                        };
+                        _page = 0;
+                      });
+                      _load();
+                    },
+                  ),
+                ],
               ),
             ],
           ),
@@ -1265,6 +1324,161 @@ class _AdminAuditScreenState extends State<_AdminAuditScreen> {
   }
 }
 
+class _AdminBackupScreen extends StatefulWidget {
+  const _AdminBackupScreen();
+
+  @override
+  State<_AdminBackupScreen> createState() => _AdminBackupScreenState();
+}
+
+class _AdminBackupScreenState extends State<_AdminBackupScreen> {
+  final _service = AdminService();
+  bool _isRunning = false;
+  String _status = 'Aún no se ha generado un backup en esta sesión.';
+
+  Future<void> _createAndDownloadBackup() async {
+    setState(() {
+      _isRunning = true;
+      _status = 'Solicitando backup seguro…';
+    });
+
+    try {
+      final backupId = await _service.startSystemBackup();
+      Map<String, dynamic>? backup;
+      for (var attempt = 0; attempt < 600; attempt++) {
+        await Future<void>.delayed(const Duration(seconds: 3));
+        if (!mounted) return;
+
+        backup = await _service.getSystemBackupStatus(backupId);
+        final status = backup['status'] as String?;
+        if (status == 'failed') {
+          throw StateError(
+            backup['error'] as String? ??
+                'El proceso de backup falló. Revisa GitHub Actions.',
+          );
+        }
+        if (status == 'completed') break;
+
+        setState(() {
+          _status = status == 'running'
+              ? 'Exportando la base de datos y empaquetando las funciones…'
+              : 'El backup está en cola…';
+        });
+      }
+
+      if (backup == null || backup['status'] != 'completed') {
+        throw TimeoutException(
+          'El backup tardó más de 30 minutos. Revisa GitHub Actions antes de volver a intentarlo.',
+        );
+      }
+
+      final url = backup['downloadUrl'] as String?;
+      if (url == null || url.isEmpty) {
+        throw const FormatException(
+          'El backup terminó, pero no se recibió el enlace de descarga.',
+        );
+      }
+
+      setState(() => _status = 'Descargando el backup…');
+      final bytes = await _service.downloadSystemBackup(url);
+      if (!mounted) return;
+
+      final fileName =
+          backup['fileName'] as String? ??
+          'billtracker-backup-${DateFormat('yyyyMMdd-HHmmss').format(DateTime.now())}.zip';
+      final savedFile = await FilePicker.saveFile(
+        dialogTitle: 'Elige dónde guardar el backup de BillTracker',
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: const ['zip'],
+        bytes: bytes,
+      );
+      if (!mounted) return;
+
+      setState(() {
+        _status = savedFile == null
+            ? 'El backup se generó, pero se canceló la selección de ubicación.'
+            : 'Backup descargado correctamente.';
+      });
+      if (savedFile != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Backup guardado correctamente.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _status = 'No se pudo completar el backup.');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al crear el backup: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isRunning = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Text(
+          'Backup del sistema',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Genera una copia descargable de la base de datos pública (estructura, datos, funciones SQL, triggers y políticas) y del código de las Edge Functions.',
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'No incluye cuentas de Supabase Auth, archivos de Storage (como fotos), ni secretos del proyecto.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'El archivo contiene datos privados. En la app podrás elegir dónde guardarlo. En web, la ubicación depende de la configuración de descargas del navegador; activa "Preguntar dónde guardar cada archivo" para elegirla.',
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    if (_isRunning) ...[
+                      const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    Expanded(child: Text(_status)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton.icon(
+            onPressed: _isRunning ? null : _createAndDownloadBackup,
+            icon: const Icon(Icons.cloud_download_outlined),
+            label: Text(
+              _isRunning ? 'Creando backup…' : 'Crear y descargar backup',
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _AdminSettingsScreen extends StatefulWidget {
   const _AdminSettingsScreen();
 
@@ -1275,6 +1489,9 @@ class _AdminSettingsScreen extends StatefulWidget {
 class _AdminSettingsScreenState extends State<_AdminSettingsScreen> {
   final _service = AdminService();
   final _announcement = TextEditingController();
+  Timer? _noticeExpiryTimer;
+  String? _activeAnnouncement;
+  DateTime? _activeAnnouncementExpiresAt;
   bool _loading = true;
   bool _saving = false;
   Object? _error;
@@ -1287,6 +1504,7 @@ class _AdminSettingsScreenState extends State<_AdminSettingsScreen> {
 
   @override
   void dispose() {
+    _noticeExpiryTimer?.cancel();
     _announcement.dispose();
     super.dispose();
   }
@@ -1298,20 +1516,66 @@ class _AdminSettingsScreenState extends State<_AdminSettingsScreen> {
     });
     try {
       final settings = await _service.getSettings();
-      _announcement.text = settings['announcement'] as String? ?? '';
+      _setActiveAnnouncement(
+        settings['announcement'] as String?,
+        settings['updatedAt'],
+      );
     } catch (error) {
       _error = error;
     }
     if (mounted) setState(() => _loading = false);
   }
 
+  void _setActiveAnnouncement(String? message, Object? updatedAt) {
+    _noticeExpiryTimer?.cancel();
+    final trimmedMessage = message?.trim();
+    final publishedAt = updatedAt is String
+        ? DateTime.tryParse(updatedAt)?.toLocal()
+        : null;
+    if (trimmedMessage == null ||
+        trimmedMessage.isEmpty ||
+        publishedAt == null) {
+      _activeAnnouncement = null;
+      _activeAnnouncementExpiresAt = null;
+      return;
+    }
+
+    final expiresAt = publishedAt.add(const Duration(hours: 24));
+    if (!expiresAt.isAfter(DateTime.now())) {
+      _activeAnnouncement = null;
+      _activeAnnouncementExpiresAt = null;
+      return;
+    }
+
+    _activeAnnouncement = trimmedMessage;
+    _activeAnnouncementExpiresAt = expiresAt;
+    _noticeExpiryTimer = Timer(expiresAt.difference(DateTime.now()), () {
+      if (!mounted) return;
+      setState(() {
+        _activeAnnouncement = null;
+        _activeAnnouncementExpiresAt = null;
+      });
+      _load();
+    });
+  }
+
   Future<void> _save() async {
+    final message = _announcement.text.trim();
+    if (message.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Escribe el aviso antes de guardarlo.')),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
-      await _service.updateAnnouncement(_announcement.text);
+      final result = await _service.updateAnnouncement(message);
+      _announcement.clear();
+      _setActiveAnnouncement(message, result['updatedAt']);
       if (mounted) {
+        setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Aviso del sistema actualizado.')),
+          const SnackBar(content: Text('Aviso del sistema publicado.')),
         );
       }
     } catch (error) {
@@ -1320,6 +1584,52 @@ class _AdminSettingsScreenState extends State<_AdminSettingsScreen> {
           SnackBar(
             content: Text('No se pudo guardar la configuración: $error'),
           ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _deleteActiveAnnouncement() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar aviso activo'),
+        content: const Text(
+          'El aviso dejará de mostrarse en el dashboard de los usuarios.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _saving = true);
+    try {
+      await _service.updateAnnouncement('');
+      _noticeExpiryTimer?.cancel();
+      if (mounted) {
+        setState(() {
+          _activeAnnouncement = null;
+          _activeAnnouncementExpiresAt = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Aviso activo eliminado.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo eliminar el aviso: $error')),
         );
       }
     } finally {
@@ -1340,9 +1650,46 @@ class _AdminSettingsScreenState extends State<_AdminSettingsScreen> {
         ),
         const SizedBox(height: 8),
         const Text(
-          'Publica un aviso operativo que aparecerá en el dashboard durante 24 horas y también quedará en el historial de notificaciones. Déjalo vacío para ocultar el aviso activo.',
+          'Publica un aviso operativo que aparecerá en el dashboard durante 24 horas. Un aviso nuevo reemplaza al actual; también puedes eliminarlo antes.',
         ),
         const SizedBox(height: 20),
+        if (_activeAnnouncement != null) ...[
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Aviso activo',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: _saving ? null : _deleteActiveAnnouncement,
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Eliminar'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(_activeAnnouncement!),
+                  if (_activeAnnouncementExpiresAt != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Expira ${DateFormat('dd/MM/yyyy HH:mm').format(_activeAnnouncementExpiresAt!)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
         TextField(
           controller: _announcement,
           maxLength: 500,

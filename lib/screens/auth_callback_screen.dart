@@ -8,10 +8,12 @@ class AuthCallbackScreen extends StatefulWidget {
   const AuthCallbackScreen({
     super.key,
     this.isRecovery = false,
+    this.isEmailChange = false,
     this.processingError,
   });
 
   final bool isRecovery;
+  final bool isEmailChange;
   final String? processingError;
 
   @override
@@ -97,17 +99,23 @@ class _AuthCallbackScreenState extends State<AuthCallbackScreen> {
         parameters['error_description'] ??
         parameters['error'];
     final isRecovery = widget.isRecovery || parameters['type'] == 'recovery';
+    final isEmailChange =
+        widget.isEmailChange || parameters['type'] == 'email_change';
     final isAuthenticated = context.watch<AuthProvider>().isAuthenticated;
 
     final title = error != null
         ? 'No se pudo completar la autenticación'
         : isRecovery
         ? 'Enlace de recuperación confirmado'
+        : isEmailChange
+        ? 'Correo actualizado correctamente'
         : '¡Correo verificado correctamente!';
     final message = error != null
         ? _friendlyError(error)
         : isRecovery
         ? 'El enlace es válido. Ya puedes continuar con el restablecimiento de tu contraseña.'
+        : isEmailChange
+        ? 'La dirección de correo de tu cuenta fue confirmada y ya está actualizada.'
         : 'Tu cuenta está activa y tu correo electrónico ha sido confirmado.';
 
     return Scaffold(

@@ -1,0 +1,118 @@
+name: BillTracker system backup
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_id:
+        description: Backup request UUID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  create-backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BACKUP_ID: ${{ inputs.backup_id }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      BACKUP_OBJECT_PATH: ${{ inputs.backup_id }}.zip
+
+    steps:
+      - name: Mark backup as running
+        run: |
+          curl --fail --silent --show-error \
+            --request PATCH \
+            "$SUPABASE_URL/rest/v1/admin_system_backups?id=eq.$BACKUP_ID" \
+            --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Content-Type: application/json" \
+            --header "Prefer: return=minimal" \
+            --data '{"status":"running"}'
+
+      - name: Check out database functions and migrations
+        uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Export public database schema and data
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/billtracker-backup/database"
+          supabase db dump \
+            --db-url "$SUPABASE_DB_URL" \
+            --schema public \
+            --file "$RUNNER_TEMP/billtracker-backup/database/schema.sql"
+          supabase db dump \
+            --db-url "$SUPABASE_DB_URL" \
+            --schema public \
+            --data-only \
+            --file "$RUNNER_TEMP/billtracker-backup/database/data.sql"
+          cp -R supabase/functions "$RUNNER_TEMP/billtracker-backup/edge-functions"
+          cp -R supabase/migrations "$RUNNER_TEMP/billtracker-backup/migrations"
+          cp supabase/config.toml "$RUNNER_TEMP/billtracker-backup/config.toml"
+          cat > "$RUNNER_TEMP/billtracker-backup/README.txt" <<'EOF'
+          BillTracker backup
+
+          Contents:
+          - database/schema.sql: public schema, including tables, policies,
+            SQL functions, triggers, and other public database objects.
+          - database/data.sql: rows from the public schema.
+          - edge-functions/: Supabase Edge Function source code.
+          - migrations/: versioned database migrations.
+
+          Not included:
+          - Supabase Auth users and credentials.
+          - Storage files (for example profile photos).
+          - Project secrets, Vault values, SMTP settings, or provider settings.
+
+          Store this archive securely. It contains application database data.
+          EOF
+          cd "$RUNNER_TEMP"
+          zip -qr "billtracker-backup-$BACKUP_ID.zip" billtracker-backup
+
+      - name: Upload archive to private Supabase Storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 3 \
+            --request POST \
+            "$SUPABASE_URL/storage/v1/object/system-backups/$BACKUP_OBJECT_PATH" \
+            --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Content-Type: application/zip" \
+            --data-binary "@$RUNNER_TEMP/billtracker-backup-$BACKUP_ID.zip"
+
+      - name: Mark backup as completed
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --request PATCH \
+            "$SUPABASE_URL/rest/v1/admin_system_backups?id=eq.$BACKUP_ID" \
+            --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Content-Type: application/json" \
+            --header "Prefer: return=minimal" \
+            --data "{\"status\":\"completed\",\"object_path\":\"$BACKUP_OBJECT_PATH\",\"completed_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+
+      - name: Mark backup as failed
+        if: failure()
+        shell: bash
+        run: |
+          curl --silent --show-error \
+            --request PATCH \
+            "$SUPABASE_URL/rest/v1/admin_system_backups?id=eq.$BACKUP_ID" \
+            --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Content-Type: application/json" \
+            --header "Prefer: return=minimal" \
+            --data '{"status":"failed","error_message":"El workflow no pudo completar el respaldo.","completed_at":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}'

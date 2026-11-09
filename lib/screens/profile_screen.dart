@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
@@ -9,6 +8,7 @@ import '../providers/gamification_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/bill_service.dart';
 import '../utils/app_navigator.dart';
+import '../utils/profile_image_picker.dart';
 import '../widgets/user_avatar.dart';
 import 'login_screen.dart';
 
@@ -22,7 +22,6 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _profileFormKey = GlobalKey<FormState>();
   final _billService = BillService();
-  final _imagePicker = ImagePicker();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   int _totalBills = 0;
@@ -74,11 +73,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _pickAvatar() async {
     try {
-      final image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1600,
-        maxHeight: 1600,
-      );
+      final image = await pickProfileImage();
       if (image == null || !mounted) return;
       final bytes = await image.readAsBytes();
       if (!mounted) return;
@@ -92,17 +87,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _pickedImage = image;
         _previewBytes = bytes;
       });
-    } on MissingPluginException {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            kIsWeb
-                ? 'Se actualizó el selector de fotos. Recarga la página y vuelve a intentarlo.'
-                : 'No se pudo abrir la galería. Reinicia la aplicación y vuelve a intentarlo.',
-          ),
-        ),
-      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

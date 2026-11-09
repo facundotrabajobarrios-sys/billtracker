@@ -189,7 +189,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            result.emailConfirmationPending
+            result.emailChangeRateLimited
+                ? 'Nombre actualizado. Supabase limita los cambios de correo: espera al menos 25 segundos antes de volver a intentarlo. No se envió una nueva confirmación.'
+                : result.emailConfirmationPending
                 ? 'Nombre actualizado. Confirma el nuevo correo desde el mensaje que enviamos; el correo del perfil cambiará después de confirmarlo.'
                 : 'Perfil actualizado correctamente.',
           ),

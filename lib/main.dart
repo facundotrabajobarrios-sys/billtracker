@@ -44,8 +44,8 @@ Future<void> _exchangeWebAuthCode() async {
       return;
     }
 
-    final tokenHash = parameters['token_hash'];
     final linkType = parameters['type'];
+    final tokenHash = parameters['token_hash'] ?? parameters['token'];
     if (tokenHash != null) {
       if (linkType != 'recovery' &&
           linkType != 'signup' &&
@@ -201,7 +201,7 @@ Future<void> _initAuthDeepLinks() async {
       return;
     }
 
-    final tokenHash = parameters['token_hash'];
+    final tokenHash = parameters['token_hash'] ?? parameters['token'];
     if ((isRecovery || isEmailChange) && tokenHash != null) {
       await client.verifyOTP(
         tokenHash: tokenHash,

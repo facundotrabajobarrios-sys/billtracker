@@ -14,9 +14,13 @@ class AvatarUpdateResult {
 }
 
 class ProfileUpdateResult {
-  const ProfileUpdateResult({required this.emailConfirmationPending});
+  const ProfileUpdateResult({
+    required this.emailConfirmationPending,
+    this.emailChangeRateLimited = false,
+  });
 
   final bool emailConfirmationPending;
+  final bool emailChangeRateLimited;
 }
 
 class ProfileService {
@@ -44,15 +48,6 @@ class ProfileService {
       throw const FormatException('Ingresa un correo electrónico válido.');
     }
 
-    var emailConfirmationPending = false;
-    if (cleanEmail != authUser.email?.toLowerCase()) {
-      final response = await _client.auth.updateUser(
-        UserAttributes(email: cleanEmail),
-        emailRedirectTo: SupabaseConfig.authRedirectUri,
-      );
-      emailConfirmationPending = response.user?.newEmail != null;
-    }
-
     await _client
         .from('users')
         .update({'name': cleanName})
@@ -60,8 +55,24 @@ class ProfileService {
         .select('id')
         .single();
 
+    var emailConfirmationPending = false;
+    var emailChangeRateLimited = false;
+    if (cleanEmail != authUser.email?.toLowerCase()) {
+      try {
+        final response = await _client.auth.updateUser(
+          UserAttributes(email: cleanEmail),
+          emailRedirectTo: SupabaseConfig.authRedirectUri,
+        );
+        emailConfirmationPending = response.user?.newEmail != null;
+      } on AuthApiException catch (error) {
+        if (error.code != 'over_email_send_rate_limit') rethrow;
+        emailChangeRateLimited = true;
+      }
+    }
+
     return ProfileUpdateResult(
       emailConfirmationPending: emailConfirmationPending,
+      emailChangeRateLimited: emailChangeRateLimited,
     );
   }
 

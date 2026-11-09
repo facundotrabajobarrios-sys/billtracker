@@ -32,6 +32,7 @@ class ProfileService {
   Future<ProfileUpdateResult> updateProfile({
     required String name,
     required String email,
+    String? currentPassword,
   }) async {
     final authUser = _client.auth.currentUser;
     if (authUser == null) {
@@ -48,6 +49,27 @@ class ProfileService {
       throw const FormatException('Ingresa un correo electrónico válido.');
     }
 
+    final emailChanged = cleanEmail != authUser.email?.toLowerCase();
+    if (emailChanged) {
+      final currentEmail = authUser.email;
+      if (currentEmail == null || currentPassword == null) {
+        throw StateError(
+          'Ingresa tu contraseña actual para cambiar el correo.',
+        );
+      }
+      try {
+        await _client.auth.signInWithPassword(
+          email: currentEmail,
+          password: currentPassword,
+        );
+      } on AuthApiException catch (error) {
+        if (error.code == 'invalid_credentials') {
+          throw StateError('La contraseña actual no es correcta.');
+        }
+        rethrow;
+      }
+    }
+
     await _client
         .from('users')
         .update({'name': cleanName})
@@ -57,7 +79,7 @@ class ProfileService {
 
     var emailConfirmationPending = false;
     var emailChangeRateLimited = false;
-    if (cleanEmail != authUser.email?.toLowerCase()) {
+    if (emailChanged) {
       try {
         final response = await _client.auth.updateUser(
           UserAttributes(email: cleanEmail),

@@ -175,11 +175,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _saveProfile() async {
     if (!_profileFormKey.currentState!.validate()) return;
+    final currentEmail = context.read<AuthProvider>().user?.email;
+    final emailChanged =
+        _emailController.text.trim().toLowerCase() !=
+        currentEmail?.toLowerCase();
+    String? currentPassword;
+    if (emailChanged) {
+      currentPassword = await _requestEmailChangePassword();
+      if (currentPassword == null || !mounted) return;
+    }
+
     setState(() => _isSavingProfile = true);
     try {
       final result = await context.read<AuthProvider>().updateProfile(
         name: _nameController.text,
         email: _emailController.text,
+        currentPassword: currentPassword,
       );
       if (!mounted) return;
       if (!result.emailConfirmationPending) {
@@ -204,6 +215,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     } finally {
       if (mounted) setState(() => _isSavingProfile = false);
+    }
+  }
+
+  Future<String?> _requestEmailChangePassword() async {
+    final controller = TextEditingController();
+    try {
+      return await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Confirma tu contraseña'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            obscureText: true,
+            autocorrect: false,
+            enableSuggestions: false,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (value) => Navigator.pop(dialogContext, value),
+            decoration: const InputDecoration(
+              labelText: 'Contraseña actual',
+              prefixIcon: Icon(Icons.lock_outline),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, controller.text),
+              child: const Text('Continuar'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      controller.dispose();
     }
   }
 

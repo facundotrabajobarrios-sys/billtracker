@@ -80,10 +80,12 @@ class AuthProvider extends ChangeNotifier {
   Future<ProfileUpdateResult> updateProfile({
     required String name,
     required String email,
+    String? currentPassword,
   }) async {
     final result = await _profileService.updateProfile(
       name: name,
       email: email,
+      currentPassword: currentPassword,
     );
     _user = _user?.copyWith(name: name.trim());
     notifyListeners();

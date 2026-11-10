@@ -12,6 +12,9 @@ import 'package:intl/intl.dart';
 import '../models/gamification.dart';
 import '../providers/auth_provider.dart';
 import '../services/admin_service.dart';
+import '../utils/backup_download_stub.dart'
+    if (dart.library.js_interop) '../utils/backup_download_web.dart'
+    as web_backup;
 import '../widgets/user_avatar.dart';
 import 'admin_password_change_screen.dart';
 import 'home_screen.dart';
@@ -1402,19 +1405,26 @@ class _AdminBackupScreenState extends State<_AdminBackupScreen> {
       final fileName =
           backup['fileName'] as String? ??
           'billtracker-backup-${DateFormat('yyyyMMdd-HHmmss').format(DateTime.now())}.zip';
-      final savedFile = !kIsWeb && Platform.isAndroid
-          ? await const MethodChannel('billtracker/backup')
-                .invokeMethod<String>('saveBackup', {
-                  'fileName': fileName,
-                  'bytes': bytes,
-                })
-          : await FilePicker.saveFile(
-              dialogTitle: 'Elige dónde guardar el backup de BillTracker',
-              fileName: fileName,
-              type: FileType.custom,
-              allowedExtensions: const ['zip'],
-              bytes: bytes,
-            );
+      final String? savedFile;
+      if (kIsWeb) {
+        web_backup.downloadBackup(bytes, fileName);
+        savedFile = fileName;
+      } else if (Platform.isAndroid) {
+        savedFile = await const MethodChannel(
+          'billtracker/backup',
+        ).invokeMethod<String>('saveBackup', {
+          'fileName': fileName,
+          'bytes': bytes,
+        });
+      } else {
+        savedFile = await FilePicker.saveFile(
+          dialogTitle: 'Elige dónde guardar el backup de BillTracker',
+          fileName: fileName,
+          type: FileType.custom,
+          allowedExtensions: const ['zip'],
+          bytes: bytes,
+        );
+      }
       if (!mounted) return;
 
       setState(() {

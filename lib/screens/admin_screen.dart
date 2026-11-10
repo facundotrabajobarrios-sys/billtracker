@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
+import '../models/gamification.dart';
 import '../providers/auth_provider.dart';
 import '../services/admin_service.dart';
 import '../widgets/user_avatar.dart';
@@ -444,6 +445,13 @@ class _AdminUsersScreenState extends State<_AdminUsersScreen> {
       if (!mounted) return;
       final profile = Map<String, dynamic>.from(data['user'] as Map);
       final bills = _asMapList(data['bills']);
+      final badgeNames = {
+        for (final badge in Gamification.getAvailableBadges())
+          badge.id: badge.name,
+      };
+      final unlockedBadges = (profile['unlocked_badges'] as List? ?? const [])
+          .map((id) => badgeNames[id] ?? id.toString())
+          .join(', ');
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
@@ -462,6 +470,9 @@ class _AdminUsersScreenState extends State<_AdminUsersScreen> {
                   ),
                   Text(
                     'Nivel: ${profile['level'] ?? 0} · Puntos: ${profile['points'] ?? 0}',
+                  ),
+                  Text(
+                    'Insignias: ${unlockedBadges.isEmpty ? 'Ninguna' : unlockedBadges}',
                   ),
                   const Divider(height: 24),
                   Text('Facturas registradas (${data['billsTotal'] ?? 0})'),
@@ -863,6 +874,8 @@ class _AdminUsersScreenState extends State<_AdminUsersScreen> {
                           subtitle: Text(
                             '${user['email'] ?? ''}\n'
                             '${user['isAdmin'] == true ? 'Administrador' : 'Usuario'} · '
+                            'Nivel ${user['level'] ?? 1} · ${user['points'] ?? 0} pts · '
+                            '${(user['unlocked_badges'] as List? ?? const []).length} insignias\n'
                             'Registro: ${_formatDate(user['created_at'])} · '
                             '${active ? 'Activo' : 'Desactivado'}',
                           ),

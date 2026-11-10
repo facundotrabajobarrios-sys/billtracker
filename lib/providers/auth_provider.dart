@@ -222,7 +222,9 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final user = await _authService.getCurrentUser();
+      final user = await _authService.getCurrentUser().timeout(
+        const Duration(seconds: 15),
+      );
       _user = user;
       if (user != null) {
         print('👤 Usuario cargado: ${user.email}');

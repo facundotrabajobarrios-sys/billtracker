@@ -35,46 +35,28 @@ class GamificationService {
 
   // 📥 Obtener gamificación del usuario
   Future<Gamification?> getGamification(String userId) async {
-    try {
-      final response = await _client
-          .from('gamifications')
-          .select()
-          .eq('user_id', userId)
-          .maybeSingle();
+    final response = await _client
+        .from('gamifications')
+        .select()
+        .eq('user_id', userId)
+        .maybeSingle();
 
-      final gamification = response == null
-          ? await _createInitialGamification(userId)
-          : Gamification.fromJson(response);
-      if (gamification == null) return null;
-      return await _reconcileWithBills(gamification);
-    } catch (e) {
-      print('❌ Error al obtener gamificación: $e');
-      return null;
-    }
+    final gamification = response == null
+        ? await _createInitialGamification(userId)
+        : Gamification.fromJson(response);
+    if (gamification == null) return null;
+    return _reconcileWithBills(gamification);
   }
 
   // 📝 Crear gamificación inicial
   Future<Gamification?> _createInitialGamification(String userId) async {
-    try {
-      final response = await _client
-          .from('gamifications')
-          .insert({
-            'user_id': userId,
-            'total_points': 0,
-            'current_level': 1,
-            'streak_days': 0,
-            'total_paid_bills': 0,
-            'on_time_payments': 0,
-            'unlocked_badges': <String>[],
-          })
-          .select()
-          .single();
+    final response = await _client
+        .from('gamifications')
+        .upsert({'user_id': userId}, onConflict: 'user_id')
+        .select()
+        .single();
 
-      return Gamification.fromJson(response);
-    } catch (e) {
-      print('❌ Error al crear gamificación inicial: $e');
-      return null;
-    }
+    return Gamification.fromJson(response);
   }
 
   // 📤 Actualizar gamificación
@@ -96,14 +78,10 @@ class GamificationService {
 
   // 🎯 Procesar pago de factura (actualizar gamificación)
   Future<Gamification?> processPayment(String userId, Bill bill) async {
-    try {
-      if (bill.userId != userId) return null;
-      final current = await getGamification(userId);
-      return current;
-    } catch (e) {
-      print('❌ Error al procesar pago: $e');
-      return null;
+    if (bill.userId != userId) {
+      throw StateError('La factura no pertenece al usuario autenticado.');
     }
+    return getGamification(userId);
   }
 
   Future<Gamification> _reconcileWithBills(Gamification current) async {
@@ -162,7 +140,7 @@ class GamificationService {
   }) {
     final today = now ?? DateTime.now();
     final seenIds = <String>{};
-    final paid = <({DateTime? paidAt, bool onTime})>[];
+    final paid = <({String id, DateTime? paidAt, bool onTime})>[];
     var paidCount = 0;
     var hasActiveOverdue = false;
     DateTime? latestLatePayment;
@@ -196,6 +174,7 @@ class GamificationService {
       if (id != null && !seenIds.add(id)) continue;
       paidCount++;
       paid.add((
+        id: id ?? '',
         paidAt: paidAt,
         onTime:
             paidAt != null &&
@@ -208,9 +187,13 @@ class GamificationService {
       ));
     }
     paid.sort((a, b) {
-      if (a.paidAt == null) return b.paidAt == null ? 0 : -1;
-      if (b.paidAt == null) return 1;
-      return a.paidAt!.compareTo(b.paidAt!);
+      if (a.paidAt == null && b.paidAt != null) return -1;
+      if (a.paidAt != null && b.paidAt == null) return 1;
+      if (a.paidAt != null && b.paidAt != null) {
+        final dateOrder = a.paidAt!.compareTo(b.paidAt!);
+        if (dateOrder != 0) return dateOrder;
+      }
+      return a.id.compareTo(b.id);
     });
 
     var onTimePayments = 0;

@@ -66,7 +66,9 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
           child: isLoading
               ? const Center(child: CircularProgressIndicator())
               : gamification == null
-              ? _buildEmptyState()
+              ? gamificationProvider.loadError == null
+                    ? _buildEmptyState()
+                    : _buildLoadError(gamificationProvider.loadError!)
               : SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(16),
@@ -85,7 +87,10 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      _buildUnlockedBadges(unlockedBadges),
+                      _buildUnlockedBadges(
+                        unlockedBadges,
+                        gamification.totalPaidBills,
+                      ),
                       const SizedBox(height: 24),
                       const Text(
                         '🏅 Todas las insignias',
@@ -298,14 +303,20 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
     );
   }
 
-  Widget _buildUnlockedBadges(List<AchievementBadge> badges) {
+  Widget _buildUnlockedBadges(
+    List<AchievementBadge> badges,
+    int totalPaidBills,
+  ) {
     if (badges.isEmpty) {
-      return const Card(
+      return Card(
         child: Padding(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Text(
-            'Todavía no has desbloqueado trofeos. Paga una factura para '
-            'obtener tu primera insignia.',
+            totalPaidBills > 0
+                ? 'Ya registramos tus pagos. Sigue cumpliendo metas para '
+                      'desbloquear insignias.'
+                : 'Todavía no has desbloqueado trofeos. Paga una factura para '
+                      'obtener tu primera insignia.',
           ),
         ),
       );
@@ -411,6 +422,33 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
             style: TextStyle(fontSize: 14, color: Colors.grey),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLoadError(String error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 56, color: Colors.red),
+            const SizedBox(height: 12),
+            const Text(
+              'No se pudieron cargar tus recompensas.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(error, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _loadData,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reintentar'),
+            ),
+          ],
+        ),
       ),
     );
   }

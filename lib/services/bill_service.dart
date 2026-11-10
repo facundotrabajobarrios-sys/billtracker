@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'gamification_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import '../models/bill.dart';
@@ -318,24 +319,27 @@ class BillService {
 
   // 🏆 Procesar pago con gamificación
   Future<Bill?> markAsPaidWithGamification(String billId) async {
+    final userId = client.auth.currentUser?.id;
+    if (userId == null) return null;
+
+    final gamificationService = GamificationService();
+    var oldBadges = <String>[];
     try {
-      final userId = client.auth.currentUser?.id;
-      if (userId == null) return null;
-      final gamificationService = GamificationService();
-      final oldGamification = await gamificationService.getGamification(userId);
-      final oldBadges = oldGamification?.unlockedBadges ?? [];
+      oldBadges =
+          (await gamificationService.getGamification(userId))?.unlockedBadges ??
+          [];
+    } catch (error) {
+      debugPrint('No se pudieron cargar las insignias previas al pago: $error');
+    }
 
-      // 1. Marcar factura como pagada
-      final bill = await markAsPaid(billId);
-      if (bill == null) return null;
+    final bill = await markAsPaid(billId);
+    if (bill == null) return null;
 
-      // Reconciliar todos los pagos para que reintentos no dupliquen premios.
+    try {
       final updatedGamification = await gamificationService.processPayment(
         bill.userId,
         bill,
       );
-
-      // 4. Notificar nuevas insignias
       if (updatedGamification != null) {
         await gamificationService.notifyNewBadges(
           bill.userId,
@@ -343,11 +347,13 @@ class BillService {
           updatedGamification.unlockedBadges,
         );
       }
-
-      return bill;
-    } catch (e) {
-      print('❌ Error al marcar como pagada con gamificación: $e');
-      return null;
+    } catch (error) {
+      debugPrint(
+        'La factura se pagó, pero no se pudo actualizar su vista de recompensas: '
+        '$error',
+      );
     }
+
+    return bill;
   }
 }

@@ -95,7 +95,7 @@ async function usersList(context: AdminContext, body: Record<string, unknown>) {
     : "created_at";
   let query = context.client
     .from("users")
-    .select("id,email,name,created_at,avatar_url", { count: "exact" });
+    .select("id,email,name,created_at,avatar_url,level,points", { count: "exact" });
   if (search) query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
   const { data, count, error } = await query
     .order(sortBy, { ascending: body.ascending === true, nullsFirst: false })
@@ -104,6 +104,17 @@ async function usersList(context: AdminContext, body: Record<string, unknown>) {
 
   const authUsers = await listAuthUsers(context);
   const authById = new Map(authUsers.map((user) => [user.id, user]));
+  const userIds = (data ?? []).map((profile) => profile.id);
+  const { data: gamifications, error: gamificationsError } = userIds.length > 0
+    ? await context.client
+      .from("gamifications")
+      .select("user_id,current_level,total_points,unlocked_badges")
+      .in("user_id", userIds)
+    : { data: [], error: null };
+  if (gamificationsError) throw gamificationsError;
+  const gamificationByUserId = new Map(
+    (gamifications ?? []).map((row) => [row.user_id, row]),
+  );
   const { data: adminRoles, error: adminRolesError } = await context.client
     .from("admin_roles")
     .select("user_id");
@@ -112,8 +123,12 @@ async function usersList(context: AdminContext, body: Record<string, unknown>) {
   return {
     rows: (data ?? []).map((profile) => {
       const authUser = authById.get(profile.id);
+      const gamification = gamificationByUserId.get(profile.id);
       return {
         ...profile,
+        level: gamification?.current_level ?? profile.level ?? 0,
+        points: gamification?.total_points ?? profile.points ?? 0,
+        unlocked_badges: gamification?.unlocked_badges ?? [],
         email: authUser?.email ?? profile.email,
         lastSignInAt: authUser?.last_sign_in_at ?? null,
         isActive: !authUser?.banned_until ||
@@ -136,19 +151,27 @@ async function userDetails(context: AdminContext, body: Record<string, unknown>)
     .maybeSingle();
   if (profileError) throw profileError;
   if (!profile) return jsonResponse({ error: "User not found" }, 404);
-  const [bills, authUsers] = await Promise.all([
+  const [bills, gamification, authUsers] = await Promise.all([
     context.client.from("bills")
       .select("id,status,amount,due_date,created_at", { count: "exact" })
       .eq("user_id", body.userId)
       .order("created_at", { ascending: false })
       .limit(100),
+    context.client.from("gamifications")
+      .select("current_level,total_points,unlocked_badges")
+      .eq("user_id", body.userId)
+      .maybeSingle(),
     listAuthUsers(context),
   ]);
   if (bills.error) throw bills.error;
+  if (gamification.error) throw gamification.error;
   const authUser = authUsers.find((user) => user.id === body.userId);
   return {
     user: {
       ...profile,
+      level: gamification.data?.current_level ?? profile.level ?? 0,
+      points: gamification.data?.total_points ?? profile.points ?? 0,
+      unlocked_badges: gamification.data?.unlocked_badges ?? [],
       email: authUser?.email ?? profile.email,
       lastSignInAt: authUser?.last_sign_in_at ?? null,
       isActive: !authUser?.banned_until ||

@@ -23,6 +23,7 @@ import 'utils/app_navigator.dart';
 
 bool _initialPasswordRecoveryLink = false;
 bool _initialEmailChangeLink = false;
+bool _initialEmailVerificationSuccess = false;
 String? _webAuthError;
 
 Future<void> _exchangeWebAuthCode() async {
@@ -63,6 +64,7 @@ Future<void> _exchangeWebAuthCode() async {
       );
       _initialPasswordRecoveryLink = linkType == 'recovery';
       _initialEmailChangeLink = linkType == 'email_change';
+      _initialEmailVerificationSuccess = linkType == 'signup';
       if (isRecoveryRoute &&
           (!_initialPasswordRecoveryLink || auth.currentSession == null)) {
         _webAuthError =
@@ -81,6 +83,10 @@ Future<void> _exchangeWebAuthCode() async {
       _initialEmailChangeLink =
           response.redirectType == AuthChangeEvent.userUpdated.name ||
           linkType == 'email_change';
+      _initialEmailVerificationSuccess =
+          linkType == 'signup' ||
+          (!_initialEmailChangeLink &&
+              auth.currentUser?.emailConfirmedAt != null);
       if (isRecoveryRoute &&
           (!_initialPasswordRecoveryLink || auth.currentSession == null)) {
         _webAuthError =
@@ -91,12 +97,16 @@ Future<void> _exchangeWebAuthCode() async {
 
     final accessToken = parameters['access_token'];
     final refreshToken = parameters['refresh_token'];
-    if ((linkType == 'recovery' || linkType == 'email_change') &&
+    if ((linkType == 'recovery' ||
+            linkType == 'email_change' ||
+            linkType == 'signup') &&
         accessToken != null &&
         refreshToken != null) {
       await auth.setSession(refreshToken, accessToken: accessToken);
-      _initialPasswordRecoveryLink = auth.currentSession != null;
+      _initialPasswordRecoveryLink =
+          linkType == 'recovery' && auth.currentSession != null;
       _initialEmailChangeLink = linkType == 'email_change';
+      _initialEmailVerificationSuccess = linkType == 'signup';
       if (linkType == 'recovery' && !_initialPasswordRecoveryLink) {
         _webAuthError =
             'No se pudo validar el enlace de recuperación. Solicita uno nuevo.';
@@ -136,7 +146,12 @@ Future<void> main() async {
     url: SupabaseConfig.url,
     anonKey: SupabaseConfig.anonKey,
   );
-  await _exchangeWebAuthCode();
+  try {
+    await _exchangeWebAuthCode().timeout(const Duration(seconds: 15));
+  } on TimeoutException {
+    _webAuthError =
+        'La verificación tardó demasiado. Comprueba tu conexión e inténtalo de nuevo.';
+  }
 
   final supportsLocalNotifications =
       !kIsWeb &&
@@ -173,13 +188,29 @@ Future<void> _initAuthDeepLinks() async {
   final appLinks = AppLinks();
 
   Future<void> exchange(Uri? uri) async {
-    if (uri == null) return;
+    if (uri == null || uri.scheme != 'miapp' || uri.host != 'auth-callback') {
+      return;
+    }
     final fragment = uri.fragment.isEmpty
         ? <String, String>{}
         : Uri.splitQueryString(uri.fragment);
     final parameters = {...fragment, ...uri.queryParameters};
-    var isRecovery = parameters['type'] == 'recovery';
+    final linkType = parameters['type'];
+    var isRecovery = linkType == 'recovery';
     final isEmailChange = parameters['type'] == 'email_change';
+    final linkError = parameters['error_description'] ?? parameters['error'];
+    if (linkError != null) {
+      _showMobileAuthCallback(
+        isEmailChange: isEmailChange,
+        processingError: _friendlyAuthError(linkError),
+      );
+      return;
+    }
+    if (parameters['verified'] == 'true') {
+      _showMobileAuthCallback(isEmailVerification: true);
+      return;
+    }
+
     void markRecovery() {
       _initialPasswordRecoveryLink = true;
       final context = navigatorKey.currentContext;
@@ -198,29 +229,62 @@ Future<void> _initAuthDeepLinks() async {
         isRecovery = true;
         markRecovery();
       }
+      if (isRecovery) return;
+      _showMobileAuthCallback(
+        isEmailVerification: linkType == 'signup',
+        isEmailChange: isEmailChange,
+      );
       return;
     }
 
     final tokenHash = parameters['token_hash'] ?? parameters['token'];
-    if ((isRecovery || isEmailChange) && tokenHash != null) {
+    if ((isRecovery || isEmailChange || linkType == 'signup') &&
+        tokenHash != null) {
       await client.verifyOTP(
         tokenHash: tokenHash,
-        type: isRecovery ? OtpType.recovery : OtpType.emailChange,
+        type: switch (linkType) {
+          'recovery' => OtpType.recovery,
+          'email_change' => OtpType.emailChange,
+          _ => OtpType.signup,
+        },
+      );
+      if (isRecovery) return;
+      _showMobileAuthCallback(
+        isEmailVerification: linkType == 'signup',
+        isEmailChange: isEmailChange,
       );
       return;
     }
 
     final accessToken = parameters['access_token'];
     final refreshToken = parameters['refresh_token'];
-    if (isRecovery && accessToken != null && refreshToken != null) {
+    if ((isRecovery || isEmailChange || linkType == 'signup') &&
+        accessToken != null &&
+        refreshToken != null) {
       await client.setSession(refreshToken, accessToken: accessToken);
+      if (isRecovery) return;
+      _showMobileAuthCallback(
+        isEmailVerification: linkType == 'signup',
+        isEmailChange: isEmailChange,
+      );
+      return;
+    }
+    if (isRecovery || isEmailChange || linkType == 'signup') {
+      _showMobileAuthCallback(
+        isEmailChange: isEmailChange,
+        processingError:
+            'El enlace no contiene una verificación válida. Solicita uno nuevo.',
+      );
     }
   }
 
   try {
-    await exchange(await appLinks.getInitialLink());
+    await exchange(
+      await appLinks.getInitialLink().timeout(const Duration(seconds: 10)),
+    );
   } catch (error) {
     debugPrint('Error procesando el enlace de autenticación: $error');
+    _showMobileAuthCallback(processingError: _friendlyAuthError('$error'));
   }
   appLinks.uriLinkStream.listen(
     (uri) async {
@@ -228,12 +292,32 @@ Future<void> _initAuthDeepLinks() async {
         await exchange(uri);
       } catch (error) {
         debugPrint('Error procesando el enlace de autenticación: $error');
+        _showMobileAuthCallback(processingError: _friendlyAuthError('$error'));
       }
     },
     onError: (Object error) {
       debugPrint('Error leyendo deep link de autenticación: $error');
     },
   );
+}
+
+void _showMobileAuthCallback({
+  bool isEmailVerification = false,
+  bool isEmailChange = false,
+  String? processingError,
+}) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    navigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute<void>(
+        builder: (_) => AuthCallbackScreen(
+          isEmailVerification: isEmailVerification,
+          isEmailChange: isEmailChange,
+          processingError: processingError,
+        ),
+      ),
+      (_) => false,
+    );
+  });
 }
 
 class MyApp extends StatelessWidget {
@@ -290,6 +374,7 @@ class MyApp extends StatelessWidget {
                 ? AuthCallbackScreen(
                     processingError: _webAuthError,
                     isEmailChange: _initialEmailChangeLink,
+                    isEmailVerification: _initialEmailVerificationSuccess,
                   )
                 : authProvider.isPasswordRecovery
                 ? const UpdatePasswordScreen()

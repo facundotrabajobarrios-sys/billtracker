@@ -18,6 +18,8 @@ class SupabaseConfig {
   static const String mobileCallbackUri = 'miapp://auth-callback';
   static const String localDevelopmentUri = 'http://localhost:3000';
 
+  static String get signupConfirmationRedirectUri => webCallbackUri;
+
   static String get authRedirectUri {
     if (kIsWeb) return webCallbackUri;
 

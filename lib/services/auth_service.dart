@@ -37,7 +37,7 @@ class AuthService {
     final response = await _client.auth.signUp(
       email: email,
       password: password,
-      emailRedirectTo: SupabaseConfig.authRedirectUri,
+      emailRedirectTo: SupabaseConfig.signupConfirmationRedirectUri,
       data: {'name': name},
     );
 
@@ -209,7 +209,7 @@ class AuthService {
     await _client.auth.resend(
       type: supabase.OtpType.signup,
       email: email.trim(),
-      emailRedirectTo: SupabaseConfig.authRedirectUri,
+      emailRedirectTo: SupabaseConfig.signupConfirmationRedirectUri,
     );
   }
 

@@ -7,12 +7,14 @@ class GamificationProvider extends ChangeNotifier {
   final GamificationService _service = GamificationService();
   Gamification? _gamification;
   bool _isLoading = false;
+  String? _loadError;
   List<String> _newBadges = [];
   bool _showCelebration = false;
   bool _showConfetti = false;
 
   Gamification? get gamification => _gamification;
   bool get isLoading => _isLoading;
+  String? get loadError => _loadError;
   List<String> get newBadges => _newBadges;
   bool get showCelebration => _showCelebration;
   bool get showConfetti => _showConfetti;
@@ -22,6 +24,7 @@ class GamificationProvider extends ChangeNotifier {
   }
 
   Future<void> loadGamification(String userId, {bool silent = false}) async {
+    _loadError = null;
     if (!silent) {
       _isLoading = true;
       notifyListeners();
@@ -29,11 +32,10 @@ class GamificationProvider extends ChangeNotifier {
 
     try {
       _gamification = await _service.getGamification(userId);
-    } catch (e) {
-      print('❌ Error al cargar gamificación: $e');
-    }
-
-    if (!silent) {
+    } catch (error) {
+      _loadError = error.toString();
+      debugPrint('No se pudo cargar la gamificación: $error');
+    } finally {
       _isLoading = false;
       notifyListeners();
     }
@@ -41,6 +43,7 @@ class GamificationProvider extends ChangeNotifier {
 
   Future<Gamification?> processPayment(String userId, Bill bill) async {
     _isLoading = true;
+    _loadError = null;
     notifyListeners();
 
     try {
@@ -69,7 +72,9 @@ class GamificationProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return _gamification;
-    } catch (e) {
+    } catch (error) {
+      _loadError = error.toString();
+      debugPrint('No se pudieron actualizar las recompensas: $error');
       _isLoading = false;
       notifyListeners();
       return null;

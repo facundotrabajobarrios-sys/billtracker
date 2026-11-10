@@ -247,8 +247,11 @@ Después de aplicar `202611090005_admin_system_backups.sql`, configura:
    - `SUPABASE_SERVICE_ROLE_KEY`: clave `service_role` del proyecto. Solo se
      usa en GitHub Actions para actualizar el estado y subir el ZIP privado.
    - `SUPABASE_DB_URL`: cadena de conexión PostgreSQL con permisos para exportar
-     el esquema `public`; usa la conexión directa o el pooler de sesión, no el
-     pooler de transacciones.
+     el esquema `public`. Para GitHub Actions usa la URI del **Transaction
+     pooler** (IPv4); la conexión directa puede resolver a IPv6, que no está
+     disponible en los runners. Copia la URI desde **Connect → Transaction
+     pooler** y sustituye `[YOUR-PASSWORD]` por la contraseña de la base de
+     datos.
 2. Crea un fine-grained personal access token de GitHub con acceso únicamente
    a este repositorio y permiso **Actions: Read and write**. Configúralo en
    Supabase Edge Functions como `GITHUB_BACKUP_TOKEN`:

@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
@@ -1399,13 +1402,19 @@ class _AdminBackupScreenState extends State<_AdminBackupScreen> {
       final fileName =
           backup['fileName'] as String? ??
           'billtracker-backup-${DateFormat('yyyyMMdd-HHmmss').format(DateTime.now())}.zip';
-      final savedFile = await FilePicker.saveFile(
-        dialogTitle: 'Elige dónde guardar el backup de BillTracker',
-        fileName: fileName,
-        type: FileType.custom,
-        allowedExtensions: const ['zip'],
-        bytes: bytes,
-      );
+      final savedFile = !kIsWeb && Platform.isAndroid
+          ? await const MethodChannel('billtracker/backup')
+                .invokeMethod<String>('saveBackup', {
+                  'fileName': fileName,
+                  'bytes': bytes,
+                })
+          : await FilePicker.saveFile(
+              dialogTitle: 'Elige dónde guardar el backup de BillTracker',
+              fileName: fileName,
+              type: FileType.custom,
+              allowedExtensions: const ['zip'],
+              bytes: bytes,
+            );
       if (!mounted) return;
 
       setState(() {

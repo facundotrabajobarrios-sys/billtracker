@@ -8,6 +8,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config/supabase_config.dart';
 import '../providers/auth_provider.dart';
 import '../services/auth_service.dart';
+import '../utils/clear_auth_callback_url_stub.dart'
+    if (dart.library.js_interop) '../utils/clear_auth_callback_url_web.dart'
+    as web_callback;
 
 class AuthCallbackScreen extends StatefulWidget {
   const AuthCallbackScreen({
@@ -37,6 +40,7 @@ class _AuthCallbackScreenState extends State<AuthCallbackScreen> {
   void initState() {
     super.initState();
     if (widget.isEmailVerification && widget.processingError == null) {
+      if (kIsWeb) web_callback.clearSuccessfulAuthCallbackUrl();
       _redirectTimer = Timer(const Duration(seconds: 6), _continueToLogin);
     }
   }

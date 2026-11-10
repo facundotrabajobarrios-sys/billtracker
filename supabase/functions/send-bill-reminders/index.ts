@@ -140,6 +140,9 @@ Deno.serve(async (request) => {
   if (request.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
   }
+  if (request.headers.get("Authorization") !== `Bearer ${serviceRoleKey}`) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const now = new Date();
   const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);

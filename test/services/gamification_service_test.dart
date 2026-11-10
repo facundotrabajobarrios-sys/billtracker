@@ -61,25 +61,26 @@ void main() {
 
     test('recovers paid bills without inventing a payment date', () {
       final bills = [
-        for (var day = 1; day <= 10; day++)
+        for (var day = 1; day <= 30; day++)
           {
             'id': 'paid-$day',
             'status': 'paid',
-            'due_date': '2026-01-${day.toString().padLeft(2, '0')}',
+            'due_date': DateTime(2026, 1, day).toIso8601String(),
             'paid_date': null,
           },
       ];
 
       final snapshot = GamificationService.calculateSnapshot(bills);
 
-      expect(snapshot.totalPaidBills, 10);
-      expect(snapshot.totalPoints, 100);
+      expect(snapshot.totalPaidBills, 30);
+      expect(snapshot.totalPoints, 300);
       expect(snapshot.onTimePayments, 0);
       expect(snapshot.streakDays, 0);
       expect(
         snapshot.unlockedBadges,
         containsAll(['first_payment', 'paid_10']),
       );
+      expect(snapshot.unlockedBadges, isNot(contains('on_time_3')));
     });
 
     test('an active overdue bill blocks the no-overdue badge', () {

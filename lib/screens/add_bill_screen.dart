@@ -37,6 +37,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
   String? _selectedServiceId;
   String? _selectedCategoryId;
   DateTime _selectedDate = DateTime.now();
+  DateTime? _selectedPaidDate;
   String _selectedStatus = 'pending';
   bool _isRecurring = false;
   int _reminderDays = 3;
@@ -81,6 +82,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
     _amountController.text = bill.amount.toString();
     _selectedDate = bill.dueDate;
     _selectedStatus = bill.status;
+    _selectedPaidDate = bill.paidDate;
     _isRecurring = bill.isRecurring;
     _reminderDays = bill.reminderDays ?? 3;
     _reminderTimeMinutes = bill.reminderTimeMinutes;
@@ -118,6 +120,21 @@ class _AddBillScreenState extends State<AddBillScreen> {
     _reminderTimeMinutes ~/ 60,
     _reminderTimeMinutes % 60,
   );
+
+  Future<void> _selectPaidDate() async {
+    final now = DateTime.now();
+    final initialDate = _selectedPaidDate ?? now;
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate.isAfter(now) ? now : initialDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(now.year, now.month, now.day),
+      helpText: 'Selecciona la fecha real del pago',
+    );
+    if (selectedDate != null && mounted) {
+      setState(() => _selectedPaidDate = selectedDate);
+    }
+  }
 
   // 📥 Cargar servicios y categorías
   Future<void> _loadData() async {
@@ -201,6 +218,10 @@ class _AddBillScreenState extends State<AddBillScreen> {
       _showError('Selecciona una categoría');
       return;
     }
+    if (_selectedStatus == 'paid' && _selectedPaidDate == null) {
+      _showError('Indica la fecha real del pago');
+      return;
+    }
     final hasReminderChannel =
         _reminderEmailEnabled ||
         _reminderInAppEnabled ||
@@ -235,6 +256,7 @@ class _AddBillScreenState extends State<AddBillScreen> {
       categoryId: _selectedCategoryId!,
       amount: double.parse(_amountController.text),
       dueDate: _selectedDate,
+      paidDate: _selectedStatus == 'paid' ? _selectedPaidDate : null,
       status: _selectedStatus,
       description: _descriptionController.text.isNotEmpty
           ? _descriptionController.text
@@ -659,9 +681,39 @@ class _AddBillScreenState extends State<AddBillScreen> {
                               ),
                             ),
                           ],
-                          onChanged: (v) =>
-                              setState(() => _selectedStatus = v!),
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() {
+                              if (value == 'paid' &&
+                                  _selectedStatus != 'paid') {
+                                _selectedPaidDate = DateTime.now();
+                              } else if (value != 'paid') {
+                                _selectedPaidDate = null;
+                              }
+                              _selectedStatus = value;
+                            });
+                          },
                         ),
+                        if (_selectedStatus == 'paid') ...[
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: _isLoading ? null : _selectPaidDate,
+                            icon: const Icon(Icons.calendar_today_outlined),
+                            label: Text(
+                              _selectedPaidDate == null
+                                  ? 'Indicar fecha real del pago'
+                                  : 'Pagada el ${DateFormat('dd/MM/yyyy').format(_selectedPaidDate!)}',
+                            ),
+                          ),
+                          if (_selectedPaidDate == null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                'Selecciona la fecha para guardar esta factura como pagada.',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                        ],
                         const SizedBox(height: 24),
 
                         // 🔘 Botón Guardar

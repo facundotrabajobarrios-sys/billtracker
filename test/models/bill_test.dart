@@ -2,6 +2,24 @@ import 'package:billtracker/models/bill.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('serializes the payment date for paid bills', () {
+    final paidDate = DateTime(2026, 11, 10, 14, 30);
+    final bill = Bill(
+      id: 'paid-bill',
+      userId: 'user-id',
+      serviceId: 'service-id',
+      categoryId: 'category-id',
+      amount: 100000,
+      dueDate: DateTime(2026, 11, 15),
+      status: 'paid',
+      paidDate: paidDate,
+    );
+
+    final restored = Bill.fromJson(bill.toJson());
+
+    expect(restored.paidDate, paidDate);
+  });
+
   group('Bill notification settings', () {
     test('round-trips reminder channels and exact scheduled time', () {
       final reminderAt = DateTime.utc(2026, 10, 5, 12, 30);

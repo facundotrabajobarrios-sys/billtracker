@@ -23,6 +23,7 @@ class PushNotificationService {
   GlobalKey<NavigatorState>? _navigatorKey;
   String? _pendingPayload;
   bool _isInitialized = false;
+  Future<void>? _initialization;
   bool get _isSupportedPlatform =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
@@ -32,12 +33,33 @@ class PushNotificationService {
     if (!_isSupportedPlatform) {
       return;
     }
+    _navigatorKey = navigatorKey ?? _navigatorKey;
     if (_isInitialized) {
-      _navigatorKey = navigatorKey ?? _navigatorKey;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _handlePendingPayload(),
+      );
       return;
     }
 
-    _navigatorKey = navigatorKey ?? _navigatorKey;
+    final initialization = _initialization;
+    if (initialization != null) {
+      await initialization;
+      return;
+    }
+
+    final pendingInitialization = _initialize();
+    _initialization = pendingInitialization;
+    try {
+      await pendingInitialization;
+    } catch (_) {
+      if (identical(_initialization, pendingInitialization)) {
+        _initialization = null;
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _initialize() async {
     tz.initializeTimeZones();
 
     const androidInitializationSettings = AndroidInitializationSettings(
@@ -114,6 +136,7 @@ class PushNotificationService {
     if (!_isSupportedPlatform) {
       return;
     }
+    await init(navigatorKey: _navigatorKey);
     await _ensureAndroidSchedulePermissions();
     const androidChannel = AndroidNotificationDetails(
       'billtracker_channel',
@@ -178,6 +201,7 @@ class PushNotificationService {
 
   Future<void> reconcileBillReminders(Iterable<Bill> bills) async {
     if (!_isSupportedPlatform) return;
+    await init(navigatorKey: _navigatorKey);
 
     final billsList = bills.toList();
     final eligibleBills = billsList
@@ -261,6 +285,7 @@ class PushNotificationService {
     if (!_isSupportedPlatform) {
       return;
     }
+    await init(navigatorKey: _navigatorKey);
     const androidChannel = AndroidNotificationDetails(
       'billtracker_channel',
       'BillTracker',
@@ -289,6 +314,7 @@ class PushNotificationService {
     if (!_isSupportedPlatform) {
       return;
     }
+    await init(navigatorKey: _navigatorKey);
     await _notifications.cancel(id);
   }
 
@@ -296,6 +322,7 @@ class PushNotificationService {
     if (!_isSupportedPlatform) {
       return;
     }
+    await init(navigatorKey: _navigatorKey);
     await _notifications.cancelAll();
   }
 
@@ -303,6 +330,7 @@ class PushNotificationService {
     if (!_isSupportedPlatform) {
       return [];
     }
+    await init(navigatorKey: _navigatorKey);
     return _pendingNotificationRequestsWithRepair();
   }
 

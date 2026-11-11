@@ -71,26 +71,40 @@ async function markDelivery(
   return false;
 }
 
-async function sendEmail(bill: BillReminder, email: string): Promise<void> {
+async function sendEmail(bill: BillReminder, email: string): Promise<Response> {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) {
     throw new Error("Falta configurar RESEND_API_KEY para enviar recordatorios.");
   }
 
-  const service = bill.services?.name ?? "Factura";
-  const category = bill.categories?.name ?? "Sin categoría";
+  const service = relationName(bill.services) || "Factura";
+  const category = relationName(bill.categories) || "Sin categoría";
   const amount = formatAmount(bill.amount, bill.currency);
   const dueDate = formatDate(bill.due_date);
   const description = bill.description?.trim();
   const details = [
-    `<li><strong>Servicio:</strong> ${escapeHtml(service)}</li>`,
-    `<li><strong>Monto:</strong> ${escapeHtml(amount)}</li>`,
-    `<li><strong>Vencimiento:</strong> ${escapeHtml(dueDate)}</li>`,
-    `<li><strong>Categoría:</strong> ${escapeHtml(category)}</li>`,
+    `<tr><td style="padding:8px 12px;color:#526174">Servicio</td><td style="padding:8px 12px;font-weight:600">${escapeHtml(service)}</td></tr>`,
+    `<tr><td style="padding:8px 12px;color:#526174">Monto</td><td style="padding:8px 12px;font-weight:600">${escapeHtml(amount)}</td></tr>`,
+    `<tr><td style="padding:8px 12px;color:#526174">Vencimiento</td><td style="padding:8px 12px;font-weight:600">${escapeHtml(dueDate)}</td></tr>`,
+    `<tr><td style="padding:8px 12px;color:#526174">Categoría</td><td style="padding:8px 12px;font-weight:600">${escapeHtml(category)}</td></tr>`,
     ...(description
-      ? [`<li><strong>Descripción:</strong> ${escapeHtml(description)}</li>`]
+      ? [`<tr><td style="padding:8px 12px;color:#526174">Descripción</td><td style="padding:8px 12px">${escapeHtml(description)}</td></tr>`]
       : []),
   ].join("");
+  const text = [
+    "Hola,",
+    "",
+    "Te recordamos que tienes una factura pendiente en BillTracker:",
+    "",
+    `Servicio: ${service}`,
+    `Monto: ${amount}`,
+    `Vencimiento: ${dueDate}`,
+    `Categoría: ${category}`,
+    ...(description ? [`Descripción: ${description}`] : []),
+    "",
+    "Ingresa en BillTracker para consultar o actualizar el estado de tu factura.",
+    "Este correo se envió automáticamente; no respondas a este mensaje.",
+  ].join("\n");
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -101,22 +115,27 @@ async function sendEmail(bill: BillReminder, email: string): Promise<void> {
     body: JSON.stringify({
       from: sender,
       to: [email],
-      subject: `Recordatorio de pago: ${service}`,
-      html: `<p>Recuerda que tienes un pago próximo:</p><ul>${details}</ul>`,
-      text: [
-        "Recuerda que tienes un pago próximo:",
-        `Servicio: ${service}`,
-        `Monto: ${amount}`,
-        `Vencimiento: ${dueDate}`,
-        `Categoría: ${category}`,
-        ...(description ? [`Descripción: ${description}`] : []),
-      ].join("\n"),
+      subject: `Recordatorio de factura pendiente: ${service}`,
+      html: `
+        <div style="margin:0;padding:32px 16px;background:#f3f6fa;font-family:Arial,sans-serif;color:#172033">
+          <div style="max-width:560px;margin:0 auto;padding:32px;background:#ffffff;border:1px solid #e3e8ef;border-radius:12px">
+            <p style="margin:0 0 24px;color:#15803d;font-size:14px;font-weight:700;letter-spacing:.04em">BILLTRACKER</p>
+            <h1 style="margin:0 0 16px;font-size:24px;line-height:1.3">Tienes una factura pendiente</h1>
+            <p>Hola,</p>
+            <p>Te recordamos que tienes una factura pendiente. Aquí tienes sus datos:</p>
+            <table role="presentation" style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:8px">
+              <tbody>${details}</tbody>
+            </table>
+            <p style="margin:24px 0 12px">Ingresa en BillTracker para consultar o actualizar el estado de tu factura.</p>
+            <p style="margin:0;color:#64748b;font-size:13px">Este correo se envió automáticamente; no respondas a este mensaje.</p>
+            <p style="margin:24px 0 0;color:#64748b;font-size:13px">El equipo de BillTracker</p>
+          </div>
+        </div>
+      `,
+      text,
     }),
   });
-  if (!response.ok) {
-    const details = await response.text();
-    throw new Error(`Resend devolvió ${response.status}: ${details}`);
-  }
+  return response;
 }
 
 if (!supabaseUrl || !serviceRoleKey) {
@@ -136,11 +155,37 @@ function relationName(value: unknown): string {
   return "";
 }
 
+function hasServiceRole(request: Request): boolean {
+  const authorization = request.headers.get("Authorization");
+  if (!authorization?.startsWith("Bearer ")) return false;
+
+  const encodedClaims = authorization.slice("Bearer ".length).split(".")[1];
+  if (!encodedClaims) return false;
+
+  try {
+    const base64 = encodedClaims.replace(/-/g, "+").replace(/_/g, "/");
+    const paddedBase64 = base64.padEnd(
+      Math.ceil(base64.length / 4) * 4,
+      "=",
+    );
+    const bytes = Uint8Array.from(atob(paddedBase64), (character) =>
+      character.charCodeAt(0)
+    );
+    const claims: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    return typeof claims === "object" &&
+      claims !== null &&
+      "role" in claims &&
+      claims.role === "service_role";
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (request) => {
   if (request.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
   }
-  if (request.headers.get("Authorization") !== `Bearer ${serviceRoleKey}`) {
+  if (!hasServiceRole(request)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -243,30 +288,7 @@ Deno.serve(async (request) => {
           deliveryErrors.push("email-recipient");
         } else {
           try {
-            const response = await fetch("https://api.resend.com/emails", {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${resendApiKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                from: sender,
-                to: [authUser.user.email],
-                subject: `Recordatorio de pago: ${serviceName}`,
-                text: message,
-                html: `
-                  <h2>Recordatorio: ${escapeHtml(serviceName)}</h2>
-                  <p>La factura debe ser pagada. Por favor, recuerde pagarla.</p>
-                  <ul>
-                    <li><strong>Servicio:</strong> ${escapeHtml(serviceName)}</li>
-                    <li><strong>Categoría:</strong> ${escapeHtml(categoryName)}</li>
-                    <li><strong>Descripción:</strong> ${escapeHtml(description)}</li>
-                    <li><strong>Monto:</strong> ${escapeHtml(formattedAmount)}</li>
-                    <li><strong>Vencimiento:</strong> ${escapeHtml(dueDate)}</li>
-                  </ul>
-                `,
-              }),
-            });
+            const response = await sendEmail(bill, authUser.user.email);
 
             if (!response.ok) {
               const details = await response.text();

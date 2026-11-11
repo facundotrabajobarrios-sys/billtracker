@@ -145,6 +145,7 @@ Future<void> main() async {
   await Supabase.initialize(
     url: SupabaseConfig.url,
     anonKey: SupabaseConfig.anonKey,
+    authOptions: const FlutterAuthClientOptions(detectSessionInUri: false),
   );
   try {
     await _exchangeWebAuthCode().timeout(const Duration(seconds: 15));

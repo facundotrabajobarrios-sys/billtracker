@@ -39,8 +39,12 @@ class _AuthCallbackScreenState extends State<AuthCallbackScreen> {
   @override
   void initState() {
     super.initState();
+    if (kIsWeb &&
+        widget.processingError == null &&
+        (widget.isEmailVerification || widget.isEmailChange)) {
+      web_callback.clearSuccessfulAuthCallbackUrl();
+    }
     if (widget.isEmailVerification && widget.processingError == null) {
-      if (kIsWeb) web_callback.clearSuccessfulAuthCallbackUrl();
       _redirectTimer = Timer(const Duration(seconds: 6), _continueToLogin);
     }
   }

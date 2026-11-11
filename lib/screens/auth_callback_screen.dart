@@ -75,16 +75,9 @@ class _AuthCallbackScreenState extends State<AuthCallbackScreen> {
         );
       }
     }
-    if (kIsWeb && widget.isEmailVerification) {
+    if (kIsWeb && widget.isEmailVerification && appLaunch != null) {
       try {
-        final opened =
-            await (appLaunch ??
-                launchUrl(
-                  Uri.parse(
-                    '${SupabaseConfig.mobileCallbackUri}?verified=true',
-                  ),
-                  mode: LaunchMode.externalApplication,
-                ));
+        final opened = await appLaunch;
         if (opened) {
           await Future<void>.delayed(const Duration(seconds: 2));
         }

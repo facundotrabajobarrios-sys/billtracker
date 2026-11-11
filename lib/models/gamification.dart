@@ -7,6 +7,8 @@ class Gamification {
   final int totalPoints;
   final int currentLevel;
   final int streakDays; // Pagos puntuales consecutivos
+  final int daysWithoutOverdue;
+  final bool hasOverdueBills;
   final int totalPaidBills;
   final int onTimePayments;
   final List<String> unlockedBadges;
@@ -20,6 +22,8 @@ class Gamification {
     this.totalPoints = 0,
     this.currentLevel = 1,
     this.streakDays = 0,
+    this.daysWithoutOverdue = 0,
+    this.hasOverdueBills = false,
     this.totalPaidBills = 0,
     this.onTimePayments = 0,
     this.unlockedBadges = const [],
@@ -36,6 +40,8 @@ class Gamification {
       totalPoints: json['total_points'] ?? 0,
       currentLevel: json['current_level'] ?? 1,
       streakDays: json['streak_days'] ?? 0,
+      daysWithoutOverdue: json['days_without_overdue'] ?? 0,
+      hasOverdueBills: json['has_overdue_bills'] ?? false,
       totalPaidBills: json['total_paid_bills'] ?? 0,
       onTimePayments: json['on_time_payments'] ?? 0,
       unlockedBadges: json['unlocked_badges'] is List
@@ -62,6 +68,8 @@ class Gamification {
       'total_points': totalPoints,
       'current_level': currentLevel,
       'streak_days': streakDays,
+      'days_without_overdue': daysWithoutOverdue,
+      'has_overdue_bills': hasOverdueBills,
       'total_paid_bills': totalPaidBills,
       'on_time_payments': onTimePayments,
       'unlocked_badges': unlockedBadges,
@@ -79,6 +87,8 @@ class Gamification {
       totalPoints: 0,
       currentLevel: 1,
       streakDays: 0,
+      daysWithoutOverdue: 0,
+      hasOverdueBills: false,
       totalPaidBills: 0,
       onTimePayments: 0,
       unlockedBadges: [],
@@ -219,6 +229,8 @@ class Gamification {
     int? totalPoints,
     int? currentLevel,
     int? streakDays,
+    int? daysWithoutOverdue,
+    bool? hasOverdueBills,
     int? totalPaidBills,
     int? onTimePayments,
     List<String>? unlockedBadges,
@@ -232,6 +244,8 @@ class Gamification {
       totalPoints: totalPoints ?? this.totalPoints,
       currentLevel: currentLevel ?? this.currentLevel,
       streakDays: streakDays ?? this.streakDays,
+      daysWithoutOverdue: daysWithoutOverdue ?? this.daysWithoutOverdue,
+      hasOverdueBills: hasOverdueBills ?? this.hasOverdueBills,
       totalPaidBills: totalPaidBills ?? this.totalPaidBills,
       onTimePayments: onTimePayments ?? this.onTimePayments,
       unlockedBadges: unlockedBadges ?? this.unlockedBadges,

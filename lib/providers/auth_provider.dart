@@ -87,7 +87,8 @@ class AuthProvider extends ChangeNotifier {
       email: email,
       currentPassword: currentPassword,
     );
-    _user = _user?.copyWith(name: name.trim());
+    final refreshedUser = await _authService.getCurrentUser();
+    _user = refreshedUser ?? _user?.copyWith(name: name.trim());
     notifyListeners();
     return result;
   }

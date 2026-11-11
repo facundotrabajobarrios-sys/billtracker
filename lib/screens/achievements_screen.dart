@@ -79,6 +79,8 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
                       const SizedBox(height: 24),
                       _buildProgressBar(gamification),
                       const SizedBox(height: 24),
+                      _buildOverdueFreeStreakCard(gamification),
+                      const SizedBox(height: 24),
                       const Text(
                         '🏆 Trofeos ganados',
                         style: TextStyle(
@@ -278,6 +280,70 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
             Text(
               '${(progress * 100).toInt()}% completado',
               style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverdueFreeStreakCard(Gamification gamification) {
+    final progress = (gamification.daysWithoutOverdue / 30).clamp(0.0, 1.0);
+    final color = gamification.hasOverdueBills ? Colors.red : Colors.teal;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  gamification.hasOverdueBills
+                      ? Icons.warning_amber_rounded
+                      : Icons.event_available,
+                  color: color,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    gamification.hasOverdueBills
+                        ? 'Hay facturas vencidas'
+                        : 'Racha sin facturas vencidas',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                Text(
+                  '${gamification.daysWithoutOverdue} días',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 10,
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHighest,
+                valueColor: AlwaysStoppedAnimation<Color>(color),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              gamification.hasOverdueBills
+                  ? 'Paga o actualiza las facturas vencidas para retomar la racha.'
+                  : gamification.daysWithoutOverdue >= 30
+                  ? '¡Meta de 30 días cumplida!'
+                  : 'Te faltan ${30 - gamification.daysWithoutOverdue} días '
+                        'para la insignia “Sin Retrasos”.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
         ),

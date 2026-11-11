@@ -213,9 +213,27 @@ class AuthService {
     );
   }
 
-  Future<void> updatePassword(String password) async {
+  Future<void> completePasswordRecovery(String password) async {
     await _client.auth.updateUser(supabase.UserAttributes(password: password));
-    await AuditLogService().record('password_changed');
+    try {
+      await AuditLogService().record('password_changed');
+    } catch (error) {
+      debugPrint(
+        'La contraseña se actualizó, pero no se pudo registrar la auditoría: '
+        '$error',
+      );
+    }
+    try {
+      await _client.auth.signOut(scope: supabase.SignOutScope.local);
+    } catch (error) {
+      if (_client.auth.currentSession != null) rethrow;
+      debugPrint(
+        'La contraseña se actualizó y la sesión local de recuperación se '
+        'eliminó, pero Supabase no confirmó el cierre remoto: $error',
+      );
+    } finally {
+      await _clearSession();
+    }
   }
 
   Future<void> completeInitialAdminPasswordChange(String password) async {

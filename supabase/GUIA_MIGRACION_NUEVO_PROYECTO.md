@@ -150,12 +150,20 @@ dispositivo. En **Confirm signup**, usa un enlace con el token hash:
 En **Reset password**, usa:
 
 ```html
-<a href="https://facundotrabajobarrios-sys.github.io/billtracker/auth/reset-password?token_hash={{ .TokenHash }}&type=recovery">
+<a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=recovery">
   Cambiar contraseña
 </a>
 ```
 
-Los dos destinos deben permanecer en la lista de Redirect URLs permitidas.
+`{{ .RedirectTo }}` conserva el destino solicitado por el cliente: web usa
+`/auth/reset-password` y Android/iOS usa `miapp://auth-callback`. Así, la
+validación con `token_hash` no depende del verificador PKCE guardado en el
+navegador o dispositivo que solicitó el correo. Mantén ambos destinos en la
+lista de Redirect URLs permitidas. El esquema `miapp://` solo abre la app si
+está instalada; para que un enlace HTTPS abra la app con fallback web hay que
+configurar y verificar Universal Links/App Links para el dominio y los
+identificadores de publicación de iOS/Android.
+
 Los enlaces son de un solo uso y caducan según el tiempo configurado en Auth;
 si un enlace vence o ya se utilizó, solicita uno nuevo.
 

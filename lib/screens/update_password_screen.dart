@@ -34,17 +34,21 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
     setState(() => _isLoading = true);
     try {
       final navigator = Navigator.of(context);
-      await context.read<AuthProvider>().updatePassword(
+      await context.read<AuthProvider>().completePasswordRecovery(
         _passwordController.text,
       );
       if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Contraseña actualizada. Inicia sesión con tu nueva contraseña.',
+          ),
+        ),
+      );
       navigator.pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const LoginScreen()),
         (_) => false,
       );
-      await Future<void>.delayed(const Duration(milliseconds: 700));
-      if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

@@ -37,6 +37,7 @@ class AuthProvider extends ChangeNotifier {
       }
       if (state.event == supabase.AuthChangeEvent.signedOut) {
         _user = null;
+        _isPasswordRecovery = false;
         notifyListeners();
         return;
       }
@@ -177,16 +178,14 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updatePassword(String password) async {
+  Future<void> completePasswordRecovery(String password) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      await _authService.updatePassword(password);
+      await _authService.completePasswordRecovery(password);
       _isPasswordRecovery = false;
-
-      // Keep the recovery session active and refresh the application profile.
-      await loadUser();
+      _user = null;
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -219,6 +218,14 @@ class AuthProvider extends ChangeNotifier {
 
   // 🔄 Cargar usuario actual (desde caché o Supabase)
   Future<void> loadUser() async {
+    if (_isPasswordRecovery) {
+      _user = null;
+      _isLoading = false;
+      _isInitializing = false;
+      notifyListeners();
+      return;
+    }
+
     _isLoading = true;
     notifyListeners();
 
@@ -226,7 +233,7 @@ class AuthProvider extends ChangeNotifier {
       final user = await _authService.getCurrentUser().timeout(
         const Duration(seconds: 15),
       );
-      _user = user;
+      _user = _isPasswordRecovery ? null : user;
       if (user != null) {
         print('👤 Usuario cargado: ${user.email}');
       } else {
